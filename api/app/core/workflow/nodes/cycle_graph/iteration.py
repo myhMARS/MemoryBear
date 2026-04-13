@@ -249,9 +249,9 @@ class IterationRuntime:
                     else:
                         self.result.append(output)
                     child_state.append(result)
+                    self._merge_conv_vars(child_pool)
                     if stopped:
                         self.looping = False
-                self._merge_conv_vars(batch_sorted[-1][3])
         else:
             # Execute iterations sequentially
             while idx < len(array_obj) and self.looping:
