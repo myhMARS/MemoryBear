@@ -1522,6 +1522,8 @@ export const en = {
   "version":"app_release_id"
   // string, optional, application version ID; specify a historical release version ID, or omit to use the currently active version;
 }`,
+      uploadCover: 'Import and Overwrite',
+      refresh: 'Refresh Current Page',
     },
     userMemory: {
       userMemory: 'User Memory',

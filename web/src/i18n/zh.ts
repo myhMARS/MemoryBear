@@ -857,6 +857,8 @@ export const zh = {
   "version":"app_release_id"
   //string，可选，应用版本ID；指定历史发布版本ID，不传则使用当前生效版本；
 }`,
+      uploadCover: '导入并覆盖',
+      refresh: '刷新当前页',
     },
     table: {
       totalRecords: '共 {{total}} 条记录'

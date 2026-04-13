@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 16:27:52 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-07 16:28:33
+ * @Last Modified time: 2026-04-13 18:19:27
  */
 import { type FC, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -12,13 +12,14 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 
 import styles from '../index.module.css'
-import type { Application, ApplicationModalRef } from '@/views/ApplicationManagement/types';
+import type { Application, ApplicationModalRef, UploadWorkflowModalRef } from '@/views/ApplicationManagement/types';
 import ApplicationModal from '@/views/ApplicationManagement/components/ApplicationModal'
 import type { CopyModalRef, AgentRef, ClusterRef, WorkflowRef, FeaturesConfigForm } from '../types'
 import { deleteApplication, appExport } from '@/api/application'
 import CopyModal from './CopyModal'
 import PageHeader from '@/components/Layout/PageHeader'
 import CheckList from '@/views/Workflow/components/CheckList'
+import UploadModal from '@/views/ApplicationManagement/components/UploadModal'
 
 /**
  * Tab keys for application configuration
@@ -77,6 +78,7 @@ const ConfigHeader: FC<ConfigHeaderProps> = ({
   const { id, source } = useParams();
   const applicationModalRef = useRef<ApplicationModalRef>(null);
   const copyModalRef = useRef<CopyModalRef>(null);
+  const uploadModalRef = useRef<UploadWorkflowModalRef>(null);
 
   /**
    * Format tab items for display
@@ -111,6 +113,9 @@ const ConfigHeader: FC<ConfigHeaderProps> = ({
       case 'delete':
         handleDelete()
         break;
+      case 'uploadCover':
+        uploadModalRef.current?.handleOpen()
+        break
     }
   }
   /**
@@ -165,11 +170,11 @@ const ConfigHeader: FC<ConfigHeaderProps> = ({
    * Format dropdown menu items
    */
   const formatMenuItems = useMemo(() => {
-    const items = (application?.type !== 'multi_agent' ? ['edit', 'copy', 'export', 'delete'] : ['edit', 'copy', 'delete']).map(key => ({
+    const items = (application?.type !== 'multi_agent' ? ['edit', 'copy', 'export', 'uploadCover', 'delete'] : ['edit', 'copy', 'delete']).map(key => ({
       key,
       icon: <div className={`rb:size-4 rb:mr-2 ${menuIcons[key]}`} />,
       danger: key === 'delete',
-      label: t(`common.${key}`),
+      label: key === 'uploadCover' ? t('application.uploadCover') : t(`common.${key}`),
     }))
     return items
   }, [t, handleClick, application])
@@ -261,6 +266,11 @@ const ConfigHeader: FC<ConfigHeaderProps> = ({
         refresh={refresh}
       />
       <CopyModal ref={copyModalRef} data={application as Application} />
+      <UploadModal
+        ref={uploadModalRef}
+        refresh={refresh}
+        id={id as string}
+      />
     </>
   );
 };
