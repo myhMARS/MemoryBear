@@ -14,7 +14,7 @@
  */
 
 import { type FC, useRef, useState } from 'react';
-import { Layout, Dropdown, Breadcrumb, Flex } from 'antd';
+import { Layout, Dropdown, Breadcrumb, Flex, Tooltip } from 'antd';
 import type { MenuProps, BreadcrumbProps } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
@@ -136,27 +136,28 @@ const AppHeader: FC<{source?: 'space' | 'manage';}> = ({source = 'manage'}) => {
    */
   const formatBreadcrumbNames = () => {
     return breadcrumbs.filter(item => item.type !== 'group').map((menu, index) => {
+      const label = menu.i18nKey ? t(menu.i18nKey) : menu.label;
+      const isLast = index === breadcrumbs.length - 1;
       const item: any = {
-        title: menu.i18nKey ? t(menu.i18nKey) : menu.label,
+        title: (
+          <Tooltip title={label} placement="bottom">
+            <span className={styles.breadcrumbTitle}>{label}</span>
+          </Tooltip>
+        ),
       };
       
-      // If it's the last item, don't set path
-      if (index === breadcrumbs.length - 1) {
-        return item;
+      if (!isLast) {
+        if ((menu as any).onClick) {
+          item.onClick = (e: React.MouseEvent) => {
+            e.preventDefault();
+            (menu as any).onClick(e);
+          };
+          item.href = '#';
+        } else if (menu.path && menu.path !== '#') {
+          item.path = menu.path;
+        }
       }
-      
-      // If has custom onClick, use onClick and set href to '#' to show pointer cursor
-      if ((menu as any).onClick) {
-        item.onClick = (e: React.MouseEvent) => {
-          e.preventDefault();
-          (menu as any).onClick(e);
-        };
-        item.href = '#';
-      } else if (menu.path && menu.path !== '#') {
-        // Only set path when path is not '#'
-        item.path = menu.path;
-      }
-      
+
       return item;
     });
   }
