@@ -34,6 +34,7 @@ from app.schemas.implicit_memory_schema import (
     UserMemorySummary,
 )
 from app.schemas.memory_config_schema import MemoryConfig
+from app.services.memory_base_service import MIN_MEMORY_SUMMARY_COUNT
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -381,7 +382,7 @@ class ImplicitMemoryService:
 
     def _build_empty_profile(self) -> dict:
         """构建 MemorySummary 不足时返回的固定空白画像数据"""
-        now_ms = int(datetime.now().timestamp() * 1000)
+        now_ms = int(datetime.utcnow().timestamp() * 1000)
         insufficient = "Insufficient data for analysis"
 
         def _empty_dimension(name: str) -> dict:
@@ -442,17 +443,13 @@ class ImplicitMemoryService:
         
         try:
             # 前置检查：查询该用户有效的 MemorySummary 节点数量（排除孤立节点）
-            query = """
-            MATCH (n:MemorySummary)-[:DERIVED_FROM_STATEMENT]->(:Statement)
-            WHERE n.end_user_id = $end_user_id
-            RETURN count(DISTINCT n) as count
-            """
-            result = await self.neo4j_connector.execute_query(query, end_user_id=user_id)
-            memory_summary_count = result[0]["count"] if result and len(result) > 0 else 0
+            from app.services.memory_base_service import MemoryBaseService
+            base_service = MemoryBaseService()
+            memory_summary_count = await base_service.get_valid_memory_summary_count(user_id)
             logger.info(f"用户 MemorySummary 节点数量: {memory_summary_count} (user={user_id})")
 
-            if memory_summary_count < 5:
-                logger.info(f"MemorySummary 数量不足 5（当前 {memory_summary_count}），返回空白画像: user={user_id}")
+            if memory_summary_count < MIN_MEMORY_SUMMARY_COUNT:
+                logger.info(f"MemorySummary 数量不足 {MIN_MEMORY_SUMMARY_COUNT}（当前 {memory_summary_count}），返回空白画像: user={user_id}")
                 return self._build_empty_profile()
 
             # 并行调用4个分析方法
