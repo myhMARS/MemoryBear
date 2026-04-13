@@ -1,4 +1,4 @@
-name: Release Notify (Ali AI Final)
+name: Release Notify Workflow
 
 on:
   pull_request:
@@ -89,18 +89,11 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           AI_SUMMARY: ${{ steps.ai.outputs.summary }}
         run: |
-          jq -n \
-            --arg branch "$BRANCH" \
-            --arg author "$AUTHOR" \
-            --arg title "$PR_TITLE" \
-            --arg url "$PR_URL" \
-            --arg summary "$AI_SUMMARY" \
-            '{
-              msgtype: "markdown",
-              markdown: {
-                content: "## 🚀 Release 发布通知\n> 📦 **分支**: \($branch)\n> 👤 **提交人**: \($author)\n> 📝 **标题**: \($title)\n\n### 🧠 AI变更摘要\n\($summary)\n\n---\n🔗 [查看PR详情](\($url))"
-              }
-            }' > wechat_payload.json
+          CONTENT=$(printf '## 🚀 Release 发布通知\n> 📦 **分支**: %s\n> 👤 **提交人**: %s\n> 📝 **标题**: %s\n\n### 🧠 AI变更摘要\n%s\n\n---\n🔗 [查看PR详情](%s)' \
+            "$BRANCH" "$AUTHOR" "$PR_TITLE" "$AI_SUMMARY" "$PR_URL")
+
+          jq -n --arg content "$CONTENT" \
+            '{"msgtype": "markdown", "markdown": {"content": $content}}' > wechat_payload.json
 
           curl -s "$WECHAT_WEBHOOK" \
             -H 'Content-Type: application/json' \
