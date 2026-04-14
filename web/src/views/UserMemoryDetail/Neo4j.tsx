@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 17:57:26 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-14 16:38:21
+ * @Last Modified time: 2026-04-14 16:57:59
  */
 /**
  * Neo4j User Memory Detail View
@@ -10,7 +10,7 @@
  * Shows profile, interests, node statistics, relationships, and insights
  */
 
-import { type FC, useRef, useState, type MouseEvent } from 'react'
+import { type FC, useRef, useState, type MouseEvent, useEffect } from 'react'
 import clsx from 'clsx'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Flex, Popover } from 'antd'
@@ -26,6 +26,7 @@ import type { EndUserProfileRef, MemoryInsightRef, AboutMeRef, EndUser } from '.
 import {
   analyticsRefresh,
 } from '@/api/memory'
+import { useI18n } from '@/store/locale'
 
 const Neo4j: FC = () => {
   const { id } = useParams()
@@ -33,6 +34,7 @@ const Neo4j: FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState('')
+  const { language } = useI18n()
   const ref = useRef<EndUserProfileRef>(null)
   const memoryInsightRef = useRef<MemoryInsightRef>(null)
   const aboutMeRef = useRef<AboutMeRef>(null)
@@ -43,8 +45,10 @@ const Neo4j: FC = () => {
     if (!data) return
     let name = data.other_name && data.other_name !== '' ? data.other_name : data.id || data.end_user_id
     setName(name)
-    document.title = `${name} - ${t('memoryBear')}`;
   }
+  useEffect(() => {
+    document.title = `${name} - ${t('memoryBear')}`;
+  }, [name, language])
 
   /** Navigate back */
   const goBack = () => {

@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-02 16:24:44 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-14 15:52:57
+ * @Last Modified time: 2026-04-14 16:52:43
  */
 /**
  * useBreadcrumbManager Hook
@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next'
 import { useMenu } from '@/store/menu';
 import type { MenuItem } from '@/store/menu';
+import { useI18n } from '@/store/locale'
 
 /** Breadcrumb item interface */
 export interface BreadcrumbItem {
@@ -55,6 +56,7 @@ export const useBreadcrumbManager = (options?: BreadcrumbOptions) => {
   const { allBreadcrumbs, setCustomBreadcrumbs } = useMenu();
   const navigate = useNavigate();
   const { t } = useTranslation()
+  const { language } = useI18n()
 
   /** Update breadcrumbs based on current path and type */
   const updateBreadcrumbs = useCallback((breadcrumbPath: BreadcrumbPath) => {
@@ -341,7 +343,7 @@ export const useBreadcrumbManager = (options?: BreadcrumbOptions) => {
     const lastMenu = customBreadcrumbs[customBreadcrumbs.length - 1]
     document.title = `${lastMenu.i18nKey ? t(lastMenu.i18nKey) : lastMenu.label} - ${t('memoryBear') }`;
     setCustomBreadcrumbs(customBreadcrumbs, breadcrumbKey);
-  }, [setCustomBreadcrumbs, navigate, options?.breadcrumbType, options?.onKnowledgeBaseMenuClick, options?.onKnowledgeBaseFolderClick]);
+  }, [setCustomBreadcrumbs, navigate, options?.breadcrumbType, options?.onKnowledgeBaseMenuClick, options?.onKnowledgeBaseFolderClick, language]);
 
   return {
     updateBreadcrumbs,

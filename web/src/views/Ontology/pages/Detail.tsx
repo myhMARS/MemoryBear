@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 14:10:20 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-14 15:54:05
+ * @Last Modified time: 2026-04-14 16:55:26
  */
 import { type FC, useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
@@ -18,6 +18,7 @@ import SearchInput from '@/components/SearchInput';
 import OntologyClassExtractModal from '../components/OntologyClassExtractModal'
 import BodyWrapper from '@/components/Empty/BodyWrapper'
 import Tag from '@/components/Tag'
+import { useI18n } from '@/store/locale'
 
 /**
  * Ontology detail page component
@@ -29,6 +30,7 @@ const Detail: FC = () => {
   const navigate = useNavigate()
   const { id } = useParams()
   const { modal, message } = App.useApp()
+  const { language } = useI18n()
   
   // Refs
   const ontologyClassModalRef = useRef<OntologyClassModalRef>(null)
@@ -48,7 +50,7 @@ const Detail: FC = () => {
 
   useEffect(() => {
     document.title = `${data.scene_name} - ${t('memoryBear')}`;
-  }, [data.scene_name])
+  }, [data.scene_name, language])
 
   /**
    * Fetch ontology class list data

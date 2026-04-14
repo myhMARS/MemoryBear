@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 16:29:37 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-14 10:01:05
+ * @Last Modified time: 2026-04-14 16:53:27
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
@@ -22,6 +22,7 @@ import Statistics from './Statistics'
 import TestChat from './TestChat'
 import type { WorkflowConfig } from '@/views/Workflow/types';
 import Logs from './Logs';
+import { useI18n } from '@/store/locale'
 
 /**
  * Application configuration page component
@@ -32,6 +33,7 @@ const ApplicationConfig: React.FC = () => {
   // Hooks
   const { id, source } = useParams();
   const { t } = useTranslation()
+  const { language } = useI18n()
   
   // Refs for different application types
   const agentRef = useRef<AgentRef>(null)
@@ -102,7 +104,7 @@ const ApplicationConfig: React.FC = () => {
       const appName = t('memoryBear');
       document.title = `${application.name} - ${appName}`;
     }
-  }, [application?.name])
+  }, [application?.name, language])
 
   /**
    * Fetch application information
