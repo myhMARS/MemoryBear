@@ -1,8 +1,8 @@
 import os
 import logging
-from typing import Any, cast
+import threading
+from typing import Any
 from urllib.parse import urlparse
-import uuid
 
 import requests
 from elasticsearch import Elasticsearch, helpers
@@ -14,10 +14,9 @@ from packaging.version import parse as parse_version
 # from langchain_xinference import XinferenceRerank
 from langchain_core.documents import Document
 from app.core.models.base import RedBearModelConfig
-from app.core.models import RedBearLLM, RedBearRerank
+from app.core.models import RedBearRerank
 from app.core.models.embedding import RedBearEmbeddings
-from app.models.models_model import ModelConfig, ModelApiKey
-from app.services.model_service import ModelConfigService
+from app.models.models_model import ModelApiKey
 
 from app.models.knowledge_model import Knowledge
 from app.core.rag.vdb.field import Field
@@ -662,9 +661,6 @@ class ElasticSearchVector(BaseVector):
             }
             print(index_mapping)
             self._client.indices.create(index=self._collection_name, body=index_mapping)
-
-
-import threading
 
 
 class ElasticSearchVectorFactory:
