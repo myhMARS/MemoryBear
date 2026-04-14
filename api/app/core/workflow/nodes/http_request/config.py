@@ -72,7 +72,8 @@ class HttpContentTypeConfig(BaseModel):
     @classmethod
     def validate_data(cls, v, info):
         content_type = info.data.get("content_type")
-        if content_type == HttpContentType.FROM_DATA and not isinstance(v, list):
+        if content_type == HttpContentType.FROM_DATA and (
+                not isinstance(v, list) or not all(isinstance(item, HttpFormData) for item in v)):
             raise ValueError("When content_type is 'form-data', data must be a list of HttpFormData")
         elif content_type in [HttpContentType.JSON] and not isinstance(v, str):
             raise ValueError("When content_type is JSON, data must be of type str")
