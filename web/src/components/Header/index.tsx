@@ -135,9 +135,10 @@ const AppHeader: FC<{source?: 'space' | 'manage';}> = ({source = 'manage'}) => {
    * - Disables navigation for the last breadcrumb item
    */
   const formatBreadcrumbNames = () => {
-    return breadcrumbs.filter(item => item.type !== 'group').map((menu, index) => {
+    const filtered = breadcrumbs.filter(item => item.type !== 'group');
+    return filtered.map((menu, index) => {
       const label = menu.i18nKey ? t(menu.i18nKey) : menu.label;
-      const isLast = index === breadcrumbs.length - 1;
+      const isLast = index === filtered.length - 1;
       const item: any = {
         title: (
           <Tooltip title={label} placement="bottom">
