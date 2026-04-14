@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-05 10:44:08 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-02-05 10:56:28
+ * @Last Modified time: 2026-04-14 16:27:08
  */
 import { type FC, useEffect, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
@@ -71,6 +71,7 @@ const SkillConfig: FC = () => {
       .then(res => {
         form.setFieldsValue(res as SkillFormData)
         setData(res as SkillFormData)
+        document.title = `${(res as SkillFormData).name} - ${t('memoryBear')}`;
       })
       .finally(() => {
         setLoading(false)

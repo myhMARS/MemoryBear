@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 14:10:20 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-03-26 18:55:37
+ * @Last Modified time: 2026-04-14 15:54:05
  */
 import { type FC, useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
@@ -45,6 +45,10 @@ const Detail: FC = () => {
   useEffect(() => {
     getData()
   }, [id, query])
+
+  useEffect(() => {
+    document.title = `${data.scene_name} - ${t('memoryBear')}`;
+  }, [data.scene_name])
 
   /**
    * Fetch ontology class list data

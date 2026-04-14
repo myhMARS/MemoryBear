@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 17:57:11 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-03-31 15:29:45
+ * @Last Modified time: 2026-04-14 15:56:15
  */
 /**
  * RAG User Memory Detail View
@@ -96,6 +96,10 @@ const Rag: FC = () => {
     })
   }
   const name = loading.detail ? '' : data?.name && data?.name !== '' ? data.name : id
+
+  useEffect(() => {
+    document.title = `${name} - ${t('memoryBear')}`;
+  }, [name])
 
   const [refreshLoading, setRefreshLoading] = useState(false)
   const handleRefresh = () => {
