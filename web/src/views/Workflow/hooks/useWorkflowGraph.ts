@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 15:17:48 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-13 15:33:58
+ * @Last Modified time: 2026-04-14 15:05:33
  */
 import { Clipboard, Graph, Keyboard, MiniMap, Node, Snapline, type Edge } from '@antv/x6';
 import { register } from '@antv/x6-react-shape';
@@ -204,7 +204,7 @@ export const useWorkflowGraph = ({
                 ? Object.entries(group_variables as Record<string, any>).map(([key, value]) => ({ key, value }))
                 : group_variables
             } else if (type === 'http-request' && (key === 'headers' || key === 'params') && config[key] && typeof config[key] === 'object' && !Array.isArray(config[key]) && nodeLibraryConfig.config && nodeLibraryConfig.config[key]) {
-              nodeLibraryConfig.config[key].defaultValue = Object.entries(config[key]).map(([name, value]) => ({ name, value }))
+              nodeLibraryConfig.config[key].defaultValue = Object.entries(config[key]).map(([key, value]) => ({ key, value }))
             } else if (type === 'code' && key === 'code' && config[key] && nodeLibraryConfig.config && nodeLibraryConfig.config[key]) {
               try {
                 nodeLibraryConfig.config[key].defaultValue = decodeURIComponent(atob(config[key] as string))
@@ -1259,7 +1259,7 @@ export const useWorkflowGraph = ({
                 itemConfig[key] = {}
                 if (value.length > 0) {
                   value.forEach((vo: any) => {
-                    itemConfig[key][vo.name] = vo.value
+                    itemConfig[key][vo.key] = vo.value
                   })
                 }
               } else if (data.config[key] && 'defaultValue' in data.config[key] && key !== 'knowledge_retrieval') {
