@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 17:44:15 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-15 14:25:17
+ * @Last Modified time: 2026-03-27 15:14:58
  */
 /**
  * Prompt Editor Component
@@ -18,9 +18,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 import { updatePromptMessages, createPromptSessions } from '@/api/prompt'
 import type { PromptVariableModalRef, AiPromptForm, HistoryItem, PromptSaveModalRef } from './types'
+import ChatContent from '@/components/Chat/ChatContent'
 import Empty from '@/components/Empty'
 import ConversationEmptyIcon from '@/assets/images/conversation/conversationEmpty.svg'
-import PromptChatPanel, { type PromptChatPanelRef } from '@/components/Chat/PromptChatPanel'
+import type { ChatItem } from '@/components/Chat/types'
 import ModelSelect from '@/components/ModelSelect'
 import PromptVariableModal from './components/PromptVariableModal'
 import { type SSEMessage } from '@/utils/stream'
@@ -38,15 +39,13 @@ const Prompt: FC = () => {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [form] = Form.useForm<AiPromptForm>()
+  const [chatList, setChatList] = useState<ChatItem[]>([])
   const [variables, setVariables] = useState<string[]>([])
   const [promptSession, setPromptSession] = useState<string | null>(null)
   const aiPromptVariableModalRef = useRef<PromptVariableModalRef>(null)
   const promptSaveModalRef = useRef<PromptSaveModalRef>(null)
-  const chatPanelRef = useRef<PromptChatPanelRef>(null)
   const editorRef = useRef<any>(null)
   const currentPromptValueRef = useRef<string>(undefined)
-  const isStreamingRef = useRef(false)
-  const [hasPrompt, setHasPrompt] = useState(false)
   const values = Form.useWatch([], form)
   const [editVo, setEditVo] = useState<HistoryItem | null>(null)
 
@@ -57,14 +56,14 @@ const Prompt: FC = () => {
   useEffect(() => {
     if (editVo?.id) {
       form.setFieldValue('current_prompt', editVo.prompt)
-      setHasPrompt(true)
-      chatPanelRef.current?.clear()
+      setChatList([])
     }
     updateSession()
   }, [editVo])
 
   /** Update session ID */
   const updateSession = () => {
+    console.log('updateSession')
     createPromptSessions().then(res => {
       const response = res as { id: string }
       setPromptSession(response.id)
@@ -84,7 +83,9 @@ const Prompt: FC = () => {
     }
     const messageContent = values.message
     setLoading(true)
-    chatPanelRef.current?.append({ role: 'user', content: messageContent })
+    setChatList(prev => {
+      return [...prev, { role: 'user', content: messageContent}]
+    })
     form.setFieldsValue({ message: undefined, current_prompt: undefined })
 
     const handleStreamMessage = (data: SSEMessage[]) => {
@@ -94,35 +95,33 @@ const Prompt: FC = () => {
         switch (item.event) {
           case 'start':
             currentPromptValueRef.current = ''
-            isStreamingRef.current = true
-            setHasPrompt(true)
             if (editorRef.current?.clear) {
               editorRef.current.clear();
             }
             break;
           case 'message':
-            if (content) {
+            if (typeof content === 'string') {
               currentPromptValueRef.current += content;
               if (editorRef.current?.appendText) {
                 editorRef.current.appendText(content);
+                editorRef.current.scrollToBottom();
               } else {
                 form.setFieldsValue({ current_prompt: currentPromptValueRef.current })
               }
             }
             if (desc) {
-              chatPanelRef.current?.append({ role: 'assistant', content: desc })
+              setChatList(prev => {
+                return [...prev, { role: 'assistant', content: desc }]
+              })
             }
             if (variables) {
               setVariables(variables)
             }
-            console.log('currentPromptValueRef.current', currentPromptValueRef.current)
             break;
           case 'end':
             setLoading(false)
-            isStreamingRef.current = false
             // Sync form values when stream ends
             form.setFieldsValue({ current_prompt: currentPromptValueRef.current })
-            console.log('currentPromptValueRef.current', currentPromptValueRef.current)
             break
         }
       })
@@ -165,8 +164,7 @@ const Prompt: FC = () => {
   const handleRefresh = () => {
     form.setFieldValue('current_prompt', undefined)
     currentPromptValueRef.current = undefined;
-    setHasPrompt(false)
-    chatPanelRef.current?.clear()
+    setChatList([])
     setEditVo(null)
     updateSession()
   }
@@ -195,11 +193,13 @@ const Prompt: FC = () => {
               headerType="borderless"
               bodyClassName="rb:px-4! rb:pt-0! rb:pb-3!"
             >
-              <PromptChatPanel
-                ref={chatPanelRef}
+              <ChatContent
                 classNames="rb:h-[calc(100vh-257px)] rb:mb-[12px]!"
                 contentClassNames="rb:max-w-75!"
                 empty={<Empty url={ConversationEmptyIcon} title={t(`prompt.promptChatEmpty`)} isNeedSubTitle={false} size={[140, 100]} className="rb:h-full" />}
+                data={chatList || []}
+                streamLoading={false}
+                labelPosition="top"
                 labelFormat={(item) => item.role === 'user' ? t(`prompt.you`) : t(`prompt.ai`)}
               />
               <Flex align="center" gap={12} justify="space-between"
@@ -275,21 +275,16 @@ const Prompt: FC = () => {
                   ></Button>
                 </Space>}
             >
-              {hasPrompt
-                ? <Form.Item name="current_prompt" noStyle>
-                  <Editor
+              <Form.Item name="current_prompt" noStyle>
+                {values?.current_prompt
+                  ? <Editor
                     ref={editorRef}
-                    height="rb:h-[calc(100vh-193px)]"
-                    className="rb:bg-white! rb:border-none! rb:p-0! rb:text-[#212332] rb:leading-5"
-                    onChange={(value) => {
-                      if (!isStreamingRef.current) {
-                        form.setFieldValue('current_prompt', value)
-                      }
-                    }}
+                    className="rb:h-[calc(100vh-193px)] rb:bg-white! rb:border-none! rb:p-0! rb:text-[#212332] rb:leading-5"
+                    onChange={(value) => form.setFieldValue('current_prompt', value)}
                   />
-                </Form.Item>
-                : <Empty url={analysisEmptyIcon} title={t(`prompt.promptPlaceholder`)} isNeedSubTitle={false} size={[270, 170]} className="rb:h-[calc(100vh-193px)] rb:mx-auto! rb:text-center! rb:text-[12px]! rb:leading-4!" />
-              }
+                  : <Empty url={analysisEmptyIcon} title={t(`prompt.promptPlaceholder`)} isNeedSubTitle={false} size={[270, 170]} className="rb:h-[calc(100vh-193px)] rb:mx-auto! rb:text-center! rb:text-[12px]! rb:leading-4!" />
+                }
+              </Form.Item>
             </RbCard>
           </div>
         </div>
