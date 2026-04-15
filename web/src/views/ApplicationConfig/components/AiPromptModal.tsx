@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 16:26:44 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-15 14:21:55
+ * @Last Modified time: 2026-03-20 13:53:05
  */
 /**
  * AI Prompt Assistant Modal
@@ -20,9 +20,10 @@ import { updatePromptMessages, createPromptSessions } from '@/api/prompt'
 import type { AiPromptModalRef, AiPromptVariableModalRef, AiPromptForm } from '../types'
 import RbModal from '@/components/RbModal'
 import type { Model } from '@/views/ModelManagement/types'
+import ChatContent from '@/components/Chat/ChatContent'
 import Empty from '@/components/Empty'
 import ConversationEmptyIcon from '@/assets/images/conversation/conversationEmpty.svg'
-import PromptChatPanel, { type PromptChatPanelRef } from '@/components/Chat/PromptChatPanel'
+import type { ChatItem } from '@/components/Chat/types'
 import ModelSelect from '@/components/ModelSelect'
 import AiPromptVariableModal from './AiPromptVariableModal'
 import { type SSEMessage } from '@/utils/stream'
@@ -54,14 +55,12 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false)
   const [form] = Form.useForm<AiPromptForm>()
+  const [chatList, setChatList] = useState<ChatItem[]>([])
   const [variables, setVariables] = useState<string[]>([])
   const [promptSession, setPromptSession] = useState<string | null>(null)
-  const [hasPrompt, setHasPrompt] = useState(false)
   const aiPromptVariableModalRef = useRef<AiPromptVariableModalRef>(null)
-  const chatPanelRef = useRef<PromptChatPanelRef>(null)
   const editorRef = useRef<any>(null)
   const currentPromptValueRef = useRef<string>('')
-  const isStreamingRef = useRef(false)
 
   const values = Form.useWatch([], form)
 
@@ -69,13 +68,12 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
   const handleClose = () => {
     setVisible(false);
     setLoading(false)
-    chatPanelRef.current?.clear()
+    setChatList([])
     setVariables([])
     form.setFieldsValue({
       message: undefined,
       current_prompt: undefined,
     })
-    setHasPrompt(false)
   };
 
   /** Open modal and create new prompt session */
@@ -104,7 +102,9 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
     }
     const messageContent = values.message
     setLoading(true)
-    chatPanelRef.current?.append({ role: 'user', content: messageContent })
+    setChatList(prev => {
+      return [...prev, { role: 'user', content: messageContent}]
+    })
     form.setFieldsValue({ message: undefined, current_prompt: undefined })
 
     const handleStreamMessage = (data: SSEMessage[]) => {
@@ -114,8 +114,6 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
         switch (item.event) {
           case 'start':
             currentPromptValueRef.current = ''
-            isStreamingRef.current = true
-            setHasPrompt(true)
             if (editorRef.current?.clear) {
               editorRef.current.clear();
             }
@@ -125,12 +123,15 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
               currentPromptValueRef.current += content;
               if (editorRef.current?.appendText) {
                 editorRef.current.appendText(content);
+                editorRef.current.scrollToBottom();
               } else {
                 form.setFieldsValue({ current_prompt: currentPromptValueRef.current })
               }
             }
             if (desc) {
-              chatPanelRef.current?.append({ role: 'assistant', content: desc })
+              setChatList(prev => {
+                return [...prev, { role: 'assistant', content: desc }]
+              })
             }
             if (variables) {
               setVariables(variables)
@@ -138,7 +139,6 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
             break;
           case 'end':
             setLoading(false)
-            isStreamingRef.current = false
             // Sync form value when stream ends
             form.setFieldsValue({ current_prompt: currentPromptValueRef.current })
             break
@@ -193,6 +193,7 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
     setIsFocus(false)
   }
 
+  console.log(values)
   return (
     <RbModal
       title={t(`${source}.AIPromptAssistant`)}
@@ -206,7 +207,7 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
         body: 'rb:p-0! rb:border-t rb:border-t-[#EBEBEB]'
       }}
     >
-      <Form form={form} className="rb:mx-4! rb:h-[calc(100vh-202px)]">
+      <Form form={form} className="rb:mx-4!">
         <div className="rb:grid rb:grid-cols-2">
           <div className="rb:border-r rb:border-r-[#EBEBEB] rb:pr-4 rb:pt-3 rb:pb-4">
             <Form.Item
@@ -219,11 +220,13 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
               />
             </Form.Item>
 
-            <PromptChatPanel
-              ref={chatPanelRef}
-              classNames="rb:h-[calc(100vh-330px)] rb:pb-[15px]!"
+            <ChatContent
+              classNames="rb:h-105.5 rb:pb-[15px]!"
               contentClassNames="rb:max-w-75!"
               empty={<Empty url={ConversationEmptyIcon} title={t(`${source}.promptChatEmpty`)} isNeedSubTitle={false} size={[140, 100]} className="rb:h-full" />}
+              data={chatList || []}
+              streamLoading={false}
+              labelPosition="top"
               labelFormat={(item) => item.role === 'user' ? t(`${source}.you`) : t(`${source}.ai`)}
             />
             <Flex align="center" gap={12} justify="space-between"
@@ -285,21 +288,16 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
               </Space>
             </Flex>
 
-            {hasPrompt
-              ? <Form.Item name="current_prompt" noStyle>
-                <Editor
+            <Form.Item name="current_prompt" noStyle>
+              {values?.current_prompt
+                ? <Editor 
                   ref={editorRef}
-                  height="rb:h-[calc(100vh-276px)]"
-                  className={clsx('rb:bg-white! rb:border-none! rb:p-0!')}
-                  onChange={(value) => {
-                    if (!isStreamingRef.current) {
-                      form.setFieldValue('current_prompt', value)
-                    }
-                  }}
+                  className="rb:h-119 rb:bg-white! rb:border-none! rb:p-0!" 
+                  onChange={(value) => form.setFieldValue('current_prompt', value)}
                 />
-              </Form.Item>
-              : <Empty url={analysisEmptyIcon} title={t(`${source}.promptOptimizationEmpty`)} isNeedSubTitle={false} size={[270, 170]} className="rb:h-119 rb:w-70 rb:mx-auto! rb:text-center! rb:text-[12px]! rb:leading-4!" />
-            }
+                : <Empty url={analysisEmptyIcon} title={t(`${source}.promptOptimizationEmpty`)} isNeedSubTitle={false} size={[270, 170]} className="rb:h-119 rb:w-70 rb:mx-auto! rb:text-center! rb:text-[12px]! rb:leading-4!" />
+              }
+            </Form.Item>
           </div>
         </div>
       </Form>
