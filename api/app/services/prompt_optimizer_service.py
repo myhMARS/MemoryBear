@@ -227,7 +227,14 @@ class PromptOptimizerService:
             content = getattr(chunk, "content", chunk)
             if not content:
                 continue
-            buffer += content
+            if isinstance(content, str):
+                buffer += content
+            elif isinstance(content, list):
+                for _ in content:
+                    buffer += _["text"]
+            else:
+                logger.error(f"Unsupported content type - {content}")
+                raise Exception("Unsupported content type")
             cache = buffer[:-20]
 
             # 尝试找到 "prompt": " 开始位置
