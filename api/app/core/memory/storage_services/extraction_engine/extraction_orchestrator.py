@@ -311,10 +311,53 @@ class ExtractionOrchestrator:
                 dialog_data_list,
             )
 
-            # 步骤 7: 同步用户别名到数据库表（仅正式模式）
+            # 步骤 7: 触发异步元数据和别名提取（仅正式模式）
             if not is_pilot_run:
-                logger.info("步骤 7: 同步用户别名到 end_user 和 end_user_info 表")
-                await self._update_end_user_other_name(entity_nodes, dialog_data_list)
+                try:
+                    from app.core.memory.storage_services.extraction_engine.knowledge_extraction.metadata_extractor import (
+                        MetadataExtractor,
+                    )
+
+                    metadata_extractor = MetadataExtractor(
+                        llm_client=self.llm_client, language=self.language
+                    )
+                    user_statements = (
+                        metadata_extractor.collect_user_related_statements(
+                            entity_nodes, statement_nodes, statement_entity_edges
+                        )
+                    )
+                    if user_statements:
+                        end_user_id = (
+                            dialog_data_list[0].end_user_id
+                            if dialog_data_list
+                            else None
+                        )
+                        config_id = (
+                            dialog_data_list[0].config_id
+                            if dialog_data_list
+                            and hasattr(dialog_data_list[0], "config_id")
+                            else None
+                        )
+                        if end_user_id:
+                            from app.tasks import extract_user_metadata_task
+
+                            extract_user_metadata_task.delay(
+                                end_user_id=str(end_user_id),
+                                statements=user_statements,
+                                config_id=str(config_id) if config_id else None,
+                                language=self.language,
+                            )
+                            logger.info(
+                                f"已触发异步元数据提取任务，共 {len(user_statements)} 条用户相关 statement"
+                            )
+                    else:
+                        logger.info("未找到用户相关 statement，跳过元数据提取")
+                except Exception as e:
+                    logger.error(
+                        f"触发元数据提取任务失败（不影响主流程）: {e}", exc_info=True
+                    )
+
+                # 别名同步已迁移到 Celery 元数据提取任务中，不再在此处执行
 
             logger.info(f"知识提取流水线运行完成（{mode_str}）")
             return (
@@ -1107,6 +1150,7 @@ class ExtractionOrchestrator:
                     end_user_id=dialog_data.end_user_id,
                     run_id=dialog_data.run_id,  # 使用 dialog_data 的 run_id
                     content=chunk.content,
+                    speaker=getattr(chunk, 'speaker', None),
                     chunk_embedding=chunk.chunk_embedding,
                     sequence_number=chunk_idx,  # 添加必需的 sequence_number 字段
                     created_at=dialog_data.created_at,
@@ -1342,23 +1386,23 @@ class ExtractionOrchestrator:
     async def _update_end_user_other_name(
             self,
             entity_nodes: List[ExtractedEntityNode],
-            dialog_data_list: List[DialogData]
+            dialog_data_list: List[DialogData],
     ) -> None:
         """
         将本轮提取的用户别名同步到 end_user 和 end_user_info 表。
 
-        注意：此方法在 Neo4j 写入之前调用，因此不能依赖 Neo4j 作为别名的权威数据源。
-        改为直接使用内存中去重后的 entity_nodes 的 aliases，与 PgSQL 已有的 aliases 合并。
+        PgSQL end_user_info.aliases 是用户别名的唯一权威源。
+        此方法仅将本轮 LLM 从对话中新提取的别名增量追加到 PgSQL，
+        不再从 Neo4j 二层去重合并历史别名，避免脏数据反向污染 PgSQL。
 
         策略：
-        1. 从内存中的 entity_nodes 提取本轮用户别名（current_aliases）
-        2. 从去重后的 entity_nodes 中提取完整别名（含 Neo4j 二层去重合并的历史别名）
-        3. 从 PgSQL end_user_info 读取已有的 aliases（db_aliases）
-        4. 合并 db_aliases + deduped_aliases + current_aliases，去重保序
-        5. 写回 PgSQL
+        1. 从本轮对话原始发言中提取用户别名（current_aliases）
+        2. 从 PgSQL end_user_info 读取已有的 aliases（db_aliases）
+        3. 合并 db_aliases + current_aliases，去重保序
+        4. 写回 PgSQL
 
         Args:
-            entity_nodes: 去重后的实体节点列表（内存中，含二层去重合并结果）
+            entity_nodes: 去重后的实体节点列表（内存中）
             dialog_data_list: 对话数据列表
         """
         try:
@@ -1374,11 +1418,6 @@ class ExtractionOrchestrator:
             # 1. 提取本轮对话的用户别名（保持 LLM 提取的原始顺序，不排序）
             current_aliases = self._extract_current_aliases(entity_nodes, dialog_data_list)
 
-            # 1.5 从去重后的 entity_nodes 中提取完整别名
-            # 二层去重会将 Neo4j 中已有的历史别名合并到 entity_nodes 中，
-            # 这里提取出来确保 PgSQL 与 Neo4j 的别名保持同步
-            deduped_aliases = self._extract_deduped_entity_aliases(entity_nodes)
-
             # 1.6 从 Neo4j 查询已有的 AI 助手别名，作为额外的排除源
             # （防止 LLM 未提取出 AI 助手实体时，AI 别名泄漏到用户别名中）
             neo4j_assistant_aliases = await self._fetch_neo4j_assistant_aliases(end_user_id)
@@ -1390,19 +1429,12 @@ class ExtractionOrchestrator:
                 ]
                 if len(current_aliases) < before_count:
                     logger.info(f"通过 Neo4j AI 助手别名排除了 {before_count - len(current_aliases)} 个误归属别名")
-                # 同样过滤 deduped_aliases
-                deduped_aliases = [
-                    a for a in deduped_aliases
-                    if a.strip().lower() not in neo4j_assistant_aliases
-                ]
 
-            if not current_aliases and not deduped_aliases:
+            if not current_aliases:
                 logger.debug(f"本轮未提取到用户别名，跳过同步: end_user_id={end_user_id}")
                 return
 
             logger.info(f"本轮对话提取的 aliases: {current_aliases}")
-            if deduped_aliases:
-                logger.info(f"去重后实体的完整 aliases（含历史）: {deduped_aliases}")
 
             # 2. 同步到数据库
             end_user_uuid = uuid.UUID(end_user_id)
@@ -1413,21 +1445,15 @@ class ExtractionOrchestrator:
                     logger.warning(f"未找到 end_user_id={end_user_id} 的用户记录")
                     return
 
-                # 3. 从 PgSQL 读取已有 aliases 并与本轮合并
+                # 3. 从 PgSQL 读取已有 aliases 并与本轮新增合并
                 info = EndUserInfoRepository(db).get_by_end_user_id(end_user_uuid)
                 db_aliases = (info.aliases if info and info.aliases else [])
                 # 过滤掉占位名称
                 db_aliases = [a for a in db_aliases if a.strip().lower() not in self.USER_PLACEHOLDER_NAMES]
 
-                # 合并：已有 + 去重后完整别名 + 本轮新增，去重保序
+                # 合并：PgSQL 已有 + 本轮新增，去重保序（不再合并 Neo4j 历史别名）
                 merged_aliases = list(db_aliases)
                 seen_lower = {a.strip().lower() for a in merged_aliases}
-                # 先合并去重后实体的完整别名（含 Neo4j 历史别名）
-                for alias in deduped_aliases:
-                    if alias.strip().lower() not in seen_lower:
-                        merged_aliases.append(alias)
-                        seen_lower.add(alias.strip().lower())
-                # 再合并本轮新提取的别名
                 for alias in current_aliases:
                     if alias.strip().lower() not in seen_lower:
                         merged_aliases.append(alias)
@@ -1461,16 +1487,13 @@ class ExtractionOrchestrator:
                         info.aliases = merged_aliases
                         logger.info(f"同步合并后 aliases 到 end_user_info: {merged_aliases}")
                 else:
-                    first_alias = current_aliases[0].strip() if current_aliases else (
-                        deduped_aliases[0].strip() if deduped_aliases else ""
-                    )
+                    first_alias = current_aliases[0].strip() if current_aliases else ""
                     # 确保 first_alias 不是占位名称
                     if first_alias and first_alias.lower() not in self.USER_PLACEHOLDER_NAMES:
                         db.add(EndUserInfo(
                             end_user_id=end_user_uuid,
                             other_name=first_alias,
                             aliases=merged_aliases,
-                            meta_data={}
                         ))
                         logger.info(f"创建 end_user_info 记录，other_name={first_alias}, aliases={merged_aliases}")
 
@@ -1478,9 +1501,6 @@ class ExtractionOrchestrator:
 
         except Exception as e:
             logger.error(f"更新 end_user other_name 失败: {e}", exc_info=True)
-
-
-    
     # 用户实体占位名称，不允许作为 other_name 或出现在 aliases 中
     # 复用 deduped_and_disamb 模块级常量，避免重复维护
     USER_PLACEHOLDER_NAMES = _USER_PLACEHOLDER_NAMES
@@ -1587,7 +1607,6 @@ class ExtractionOrchestrator:
             if candidate and candidate.lower() in self.USER_PLACEHOLDER_NAMES:
                 return None
             return candidate
-        
         return None
 
     async def _run_dedup_and_write_summary(

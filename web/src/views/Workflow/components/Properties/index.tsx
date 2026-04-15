@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 15:39:59 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-08 14:10:40
+ * @Last Modified time: 2026-04-13 10:44:19
  */
 import { type FC, useEffect, useState, useMemo } from "react";
 import clsx from 'clsx'
@@ -248,7 +248,7 @@ const Properties: FC<PropertiesProps> = ({
         return null;
       })() : null;
 
-      let filteredList = variableList.filter(variable => variable.dataType !== 'boolean');
+      let filteredList = variableList.filter(variable => !['boolean', 'object', 'array[boolean]'].includes(variable.dataType));
 
       // If this LLM node is a child of iteration/loop, ensure parent variables are included
       if (parentLoopNode) {
@@ -266,7 +266,7 @@ const Properties: FC<PropertiesProps> = ({
                 key,
                 label: cycleVar.name,
                 type: 'variable',
-                dataType: cycleVar.type || 'String',
+                dataType: cycleVar.type || 'string',
                 value: `${parentNodeId}.${cycleVar.name}`,
                 nodeData: parentData,
               });
@@ -315,23 +315,103 @@ const Properties: FC<PropertiesProps> = ({
 
       return filteredList;
     }
-    if (nodeType === 'knowledge-retrieval' || nodeType === 'parameter-extractor' && key !== 'prompt' || nodeType === 'memory-read' || nodeType === 'question-classifier') {
+    if (nodeType === 'knowledge-retrieval') {
+      const allList = addParentIterationVars(variableList);
+      let filteredList: Suggestion[] = []
+      allList.forEach(variable => {
+        if (variable.dataType === 'string') {
+          filteredList.push(variable)
+        } else if (variable.dataType === 'file') {
+          filteredList.push({
+            ...variable,
+            disabled: true,
+            children: variable.children.filter((child: Suggestion) => child.dataType === 'string')
+          })
+        }
+      })
+
+      return filteredList
+    }
+    if ((nodeType === 'parameter-extractor' && key === 'text')
+      || (nodeType === 'question-classifier' && ['input_variable', 'categories'].includes(key as string))
+    ) {
+      const allList = addParentIterationVars(variableList);
+      let filteredList: Suggestion[] = []
+      allList.forEach(variable => {
+        if (variable.dataType === 'string') {
+          filteredList.push(variable)
+        } else if (variable.dataType === 'file') {
+          filteredList.push({
+            ...variable,
+            children: variable.children.filter((child: Suggestion) => child.dataType === 'string')
+          })
+        }
+      })
+
+      return filteredList
+    }
+
+    if ((nodeType === 'parameter-extractor' && key === 'prompt')
+      || (nodeType === 'question-classifier' && key === 'user_supplement_prompt')
+    ) {
+      const allList = addParentIterationVars(variableList);
+      let filteredList: Suggestion[] = []
+      allList.forEach(variable => {
+        if (['string', 'number'].includes(variable.dataType)) {
+          filteredList.push(variable)
+        } else if (variable.dataType === 'file') {
+          filteredList.push({
+            ...variable,
+            disabled: true,
+            children: variable.children.filter((child: Suggestion) => ['string', 'number'].includes(child.dataType))
+          })
+        }
+      })
+
+      return filteredList
+    }
+    if (nodeType === 'memory-read') {
       let filteredList = addParentIterationVars(variableList).filter(variable => variable.dataType === 'string');
       return filteredList;
     }
     if (nodeType === 'memory-write') {
-      let filteredList = addParentIterationVars(variableList).filter(variable => variable.dataType === 'string' || variable.dataType.includes('file'));
-      return filteredList;
+      const allList = addParentIterationVars(variableList);
+      let filteredList: Suggestion[] = []
+      allList.forEach(variable => {
+        if (['string', 'array[file]'].includes(variable.dataType)) {
+          filteredList.push(variable)
+        } else if (variable.dataType === 'file') {
+          filteredList.push({
+            ...variable,
+            children: variable.children.filter((child: Suggestion) => child.dataType === 'string')
+          })
+        }
+      })
+
+      return filteredList
     }
     if (nodeType === 'parameter-extractor' && key === 'prompt') {
       let filteredList = addParentIterationVars(variableList).filter(variable => variable.dataType === 'string' || variable.dataType === 'number');
       return filteredList;
     }
-    if (nodeType === 'iteration' && key === 'output' || nodeType === 'loop' && key === 'condition') {
+
+    if ((nodeType === 'iteration' && key === 'output')) {
       if (!selectedNode) return [];
-      let filteredList = nodeType === 'iteration'
-        ? variableList.filter(variable => variable.value.includes('sys.'))
-        : addParentIterationVars(variableList).filter(variable => variable.nodeData.type !== 'loop');
+      let filteredList = variableList.filter(variable => variable.value.includes('sys.'))
+      const childVariables = getChildNodeVariables(selectedNode, graphRef);
+      const existingKeys = new Set(filteredList.map(v => v.key));
+      childVariables.forEach(v => {
+        if (!existingKeys.has(v.key)) {
+          filteredList.push(v);
+          existingKeys.add(v.key);
+        }
+      });
+
+      return filteredList.filter(variable => variable.dataType !== 'array[file]');
+    }
+    if (nodeType === 'loop' && key === 'condition') {
+      if (!selectedNode) return [];
+      let filteredList = addParentIterationVars(variableList).filter(variable => variable.nodeData.type !== 'loop');
 
       const childVariables = getChildNodeVariables(selectedNode, graphRef);
       const existingKeys = new Set(filteredList.map(v => v.key));
@@ -346,6 +426,23 @@ const Properties: FC<PropertiesProps> = ({
     }
     if (nodeType === 'iteration') {
       return variableList.filter(variable => variable.dataType.includes('array'));
+    }
+
+    if ((nodeType === 'if-else' && key === 'cases')) {
+      const allList = addParentIterationVars(variableList);
+      let filteredList: Suggestion[] = []
+      allList.forEach(variable => {
+        if (variable.dataType === 'file') {
+          filteredList.push({
+            ...variable,
+            disabled: true,
+          })
+        } else {
+          filteredList.push(variable)
+        }
+      })
+
+      return filteredList
     }
 
     // For all other node types, add parent iteration variables if applicable
@@ -546,7 +643,7 @@ const Properties: FC<PropertiesProps> = ({
                               key: contextKey,
                               label: 'context',
                               type: 'variable',
-                              dataType: 'String',
+                              dataType: 'string',
                               value: `context`,
                               nodeData: selectedNode.getData(),
                               isContext: true,
@@ -585,7 +682,7 @@ const Properties: FC<PropertiesProps> = ({
 
                       if (config.type === 'messageEditor') {
                         return (
-                          <Form.Item key={key} name={key} label={selectedNode?.data?.type === 'memory-write' ? t(`workflow.config.${selectedNode?.data?.type}.${key}`) : undefined}>
+                          <Form.Item key={key} name={key} required={config.required} label={selectedNode?.data?.type === 'memory-write' ? t(`workflow.config.${selectedNode?.data?.type}.${key}`) : undefined}>
                             <MessageEditor
                               title={t(`workflow.config.${selectedNode?.data?.type}.${key}`)}
                               placeholder={t(config.placeholder || 'common.pleaseEnter')}
@@ -694,7 +791,7 @@ const Properties: FC<PropertiesProps> = ({
                                   key: `${selectedNode.id}_cycle_${cycleVar.name}`,
                                   label: cycleVar.name,
                                   type: 'variable',
-                                  dataType: cycleVar.type || 'String',
+                                  dataType: cycleVar.type || 'string',
                                   value: `${selectedNode.getData().id}.${cycleVar.name}`,
                                   nodeData: selectedNode.getData(),
                                 }));
@@ -733,6 +830,7 @@ const Properties: FC<PropertiesProps> = ({
                                   : ''
                           }
                           hidden={Boolean(config.hidden)}
+                          required={config.required}
                         >
                           {config.type === 'input'
                             ? <Input placeholder={t('common.pleaseEnter')} />
@@ -847,7 +945,7 @@ const Properties: FC<PropertiesProps> = ({
                                                 options={getFilteredVariableList(selectedNode?.data?.type, key)}
                                               />
                                               : config.type === 'editor'
-                                                ? <Editor options={variableList} variant="outlined" size="small" placeholder={config.placeholder || t('common.pleaseEnter')} />
+                                                ? <Editor options={getFilteredVariableList(selectedNode?.data?.type, key)} variant="outlined" size="small" placeholder={config.placeholder || t('common.pleaseEnter')} />
                                                 : null
                           }
                         </Form.Item>

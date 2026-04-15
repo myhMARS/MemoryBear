@@ -411,6 +411,7 @@ class AppService:
             edges=[edge.model_dump() for edge in data.edges] if data.edges else [],
             variables=[var.model_dump() for var in data.variables] if data.variables else [],
             execution_config=data.execution_config.model_dump() if data.execution_config else {},
+            features=data.features if data.features else {},
             triggers=[trigger.model_dump() for trigger in data.triggers] if data.triggers else [],
             is_active=True,
             created_at=now,
@@ -618,6 +619,28 @@ class AppService:
         app = self._get_app_or_404(app_id)
         self._validate_app_accessible(app, workspace_id)
         return app
+
+    def get_release_by_id(self, app_id: uuid.UUID, release_id: uuid.UUID) -> AppRelease:
+        """按发布版本ID获取发布快照
+
+        Args:
+            app_id: 应用ID
+            release_id: 发布版本ID
+
+        Returns:
+            AppRelease: 发布快照
+
+        Raises:
+            BusinessException: 版本不存在或已下线
+        """
+        from app.repositories.app_repository import get_release_by_id
+        release = get_release_by_id(self.db, app_id, release_id)
+        if not release:
+            raise BusinessException(
+                f"版本 {release_id} 不存在或已下线",
+                BizCode.RELEASE_NOT_FOUND,
+            )
+        return release
 
     def create_app(
             self,

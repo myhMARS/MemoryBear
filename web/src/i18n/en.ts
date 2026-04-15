@@ -116,7 +116,7 @@ export const en = {
       prompt: 'Prompt Engineering',
       skills: 'Skill Library',
       workbench: 'Workbench',
-      memoryRelated: 'Memory-Related',
+      memoryRelated: 'Memory Hub',
       advancedSettings: 'Advanced Settings',
       promptHistory: 'My history',
       platformManagement: 'Platform Management',
@@ -1396,6 +1396,43 @@ export const en = {
       pleaseUploadFile: 'Please upload file', 
       setting: 'Settings',
       features: 'Conversation Features',
+      checkList: 'Check List',
+      checkListDesc: 'Ensure all issues are resolved before publishing',
+      checkListEmpty: 'No issues found',
+      notConnected: 'This node is not connected to other nodes',
+      goto: 'Go to',
+      cannotBeEmpty: 'cannot be empty',
+      checkListErrors: {
+        'llm.model_id': 'Model',
+        'llm.messages': 'Messages',
+        'end.output': 'Output',
+        'knowledge-retrieval.knowledge_retrieval': 'Knowledge bases',
+        'parameter-extractor.model_id': 'Model',
+        'parameter-extractor.text': 'Input variable',
+        'parameter-extractor.params': 'Params',
+        'memory-read.message': 'Message',
+        'memory-read.config_id': 'Memory config',
+        'memory-read.search_switch': 'Search mode',
+        'memory-write.messages': 'Messages',
+        'memory-write.config_id': 'Memory config',
+        'if-else.cases': 'Condition',
+        'question-classifier.model_id': 'Model',
+        'question-classifier.input_variable': 'Input variable',
+        'question-classifier.categories': 'Categories',
+        'iteration.input': 'Input variable',
+        'iteration.output': 'Output variable',
+        'var-aggregator.group_variables': 'Variables',
+        'assigner.assignments': 'Variables',
+        'http-request.url': 'API URL',
+        'http-request.body.data': 'Binary file variable',
+        'code.input_variables': 'Input variables',
+        'code.code': 'Code',
+        'code.output_variables': 'Output variables',
+        'jinja-render.mapping': 'Input variables',
+        'jinja-render.template': 'Template',
+        'document-extractor.file_selector': 'File variable',
+        'list-operator.input_list': 'Input list',
+      },
       file_upload: 'File Upload',
       file_upload_desc: 'The chat input box supports file uploads. Types include images, documents, and other types',
       settings: 'File Upload Settings',
@@ -1459,6 +1496,32 @@ export const en = {
       resetFeaturesTip: 'Please reconfigure the [Conversation Features - File Upload] settings',
       logTitle: 'Description',
       range: 'Range',
+      body: 'BODY Parameter Example',
+      bodyRequestExample: `{
+  "message": "user message content",
+  // string, required, the conversation content entered by the user;
+
+  "conversation_id": "conversation_id",
+  // string, optional, session ID; for multi-turn conversations, pass the conversation_id from the previous response; omit on first request;
+
+  "user_id": "user_id",
+  // string, optional, end-user identifier to distinguish memory and sessions across users; recommended to pass your business system user ID;
+
+  "variables": {},
+  // object, optional (requires application configuration to take effect);
+
+  "stream": false,
+  // boolean, optional, whether to stream the response; defaults to false; when true, returns an SSE event stream;
+
+  "thinking": false,
+  // boolean, optional, whether to enable deep thinking; defaults to false (requires application configuration when true);
+
+  "files": [],
+  // array, optional, list of multimodal attachments (requires application configuration to take effect);
+
+  "version":"app_release_id"
+  // string, optional, application version ID; specify a historical release version ID, or omit to use the currently active version;
+}`,
     },
     userMemory: {
       userMemory: 'User Memory',
@@ -2113,6 +2176,19 @@ Memory Bear: After the rebellion, regional warlordism intensified for several re
       return_text_position_enable: 'Return Text Position Info',
       return_text_position_enable_desc: 'Whether to return coordinate positions of recognized text',
 
+      OpenClawTool_desc: 'OpenClaw Remote Agent',
+      OpenClawTool_features: 'OpenClaw Remote Agent — 3D Printing and Device Management',
+      OpenClawTool_config_desc: 'Configure OpenClaw Gateway connection. Server URL and API Key are required.',
+      OpenClawTool_server_url_desc: 'OpenClaw Gateway server URL, e.g. http://xxx.xxx.xxx.xx:xxx',
+      OpenClawTool_api_key_desc: 'OpenClaw API Key, created in OpenClaw admin console',
+      OpenClawTool_agent_id_desc: 'Target Agent ID, defaults to main, usually no need to change',
+      OpenClawTool_enable: 'Enable OpenClaw',
+      agent_id: 'Agent ID',
+      '3dPrinting': '3D Printing',
+      deviceManagement: 'Device Management',
+      multimodalInteraction: 'Multimodal Interaction',
+      remoteAgent: 'Remote Agent',
+
       addCustom: 'Add Custom Tool',
       editCustom: 'Edit Custom Tool',
       schema: 'Schema',
@@ -2189,6 +2265,7 @@ Memory Bear: After the rebellion, regional warlordism intensified for several re
       addvariable: 'Chat Variables',
       addChatVariable: 'Add Chat Variable',
       editChatVariable: 'Edit Chat Variable',
+      invalidJSON: 'Invalid JSON format',
 
       config: {
         llm: {
@@ -2290,6 +2367,11 @@ Memory Bear: After the rebellion, regional warlordism intensified for several re
           boolean: {
             "eq": 'Is',
             "ne": 'Is Not',
+          },
+          file: {
+            "empty": 'Not Exist',
+            "not_empty": 'Exists',
+            eq: 'All Are'
           },
           else_desc: 'Used to define the logic that should be executed when the if condition is not met.',
           unset: 'Condition Not Set',
@@ -2403,7 +2485,8 @@ Memory Bear: After the rebellion, regional warlordism intensified for several re
         value: 'Value',
         addCase: 'Add Condition',
         addVariable: 'Add Variables',
-        output: 'Output Variable'
+        output: 'Output Variable',
+        duplicateName: 'Variable name cannot be duplicated',
       },
 
       clear: 'Clear',
@@ -2429,7 +2512,49 @@ Memory Bear: After the rebellion, regional warlordism intensified for several re
         iteration: 'Iteration',
         input_cycle_vars: 'Initial Loop Variables',
         output_cycle_vars: 'Final Loop Variables',
-      }
+      },
+      sureReplace: 'Confirm Replace',
+      checkList: 'Check List',
+      checkListDesc: 'Ensure all issues are resolved before publishing',
+      checkListEmpty: 'No issues found',
+      notConnected: 'This node is not connected to other nodes',
+      goto: 'Go to',
+      cannotBeEmpty: 'cannot be empty',
+      checkListErrors: {
+        'llm.model_id': 'Model',
+        'llm.messages': 'Messages',
+        'end.output': 'Output',
+        'knowledge-retrieval.knowledge_retrieval': 'Knowledge bases',
+        'parameter-extractor.model_id': 'Model',
+        'parameter-extractor.text': 'Input variable',
+        'parameter-extractor.params': 'Params',
+        'memory-read.message': 'Message',
+        'memory-read.config_id': 'Memory config',
+        'memory-read.search_switch': 'Search mode',
+        'memory-write.messages': 'Messages',
+        'memory-write.config_id': 'Memory config',
+        'if-else.cases': 'Condition',
+        'question-classifier.model_id': 'Model',
+        'question-classifier.input_variable': 'Input variable',
+        'question-classifier.categories': 'Categories',
+        'iteration.input': 'Input variable',
+        'iteration.output': 'Output variable',
+        'var-aggregator.group_variables': 'Variables',
+        'assigner.assignments': 'Variables',
+        'http-request.url': 'API URL',
+        'http-request.body.data': 'Binary file variable',
+        'code.input_variables': 'Input variables',
+        'code.code': 'Code',
+        'code.output_variables': 'Output variables',
+        'jinja-render.mapping': 'Input variables',
+        'jinja-render.template': 'Template',
+        'document-extractor.file_selector': 'File variable',
+        'list-operator.input_list': 'Input list',
+      },
+      checkListHasErrors: 'Please resolve all issues in the checklist before publishing',
+      variableSelect: {
+        empty: 'No variables available',
+      },
     },
     emotionEngine: {
       emotionEngineConfig: 'Emotion Engine Configuration',

@@ -2,23 +2,22 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 15:17:48 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-07 23:17:50
+ * @Last Modified time: 2026-04-14 17:43:14
  */
-import { useRef, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { App } from 'antd'
-import { Graph, Node, MiniMap, Snapline, Clipboard, Keyboard, type Edge } from '@antv/x6';
+import { Clipboard, Graph, Keyboard, MiniMap, Node, Snapline, type Edge } from '@antv/x6';
 import { register } from '@antv/x6-react-shape';
 import type { PortMetadata } from '@antv/x6/lib/model/port';
+import { App } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
-import { nodeRegisterLibrary, graphNodeLibrary, nodeLibrary, portMarkup, portAttrs, edgeAttrs, edgeHoverTool, edge_color, edge_selected_color, portTextAttrs, defaultAbsolutePortGroups, nodeWidth, unknownNode, defaultPortItems, portItemArgsY, edge_width, conditionNodePortItemArgsY, conditionNodeItemHeight, conditionNodeHeight, notesConfig } from '../constant';
-import type { WorkflowConfig, NodeProperties, ChatVariable } from '../types';
-import { getWorkflowConfig, saveWorkflowConfig } from '@/api/application'
+import { getWorkflowConfig, saveWorkflowConfig } from '@/api/application';
 import { useUser } from '@/store/user';
-import type { FeaturesConfigForm } from '@/views/ApplicationConfig/types'
-import { calcConditionNodeTotalHeight, getConditionNodeCasePortY } from '../utils'
-import type { Suggestion } from '../components/Editor/plugin/AutocompletePlugin';
+import type { FeaturesConfigForm } from '@/views/ApplicationConfig/types';
+import { conditionNodeHeight, conditionNodeItemHeight, conditionNodePortItemArgsY, defaultAbsolutePortGroups, defaultPortItems, edgeAttrs, edgeHoverTool, edge_color, edge_selected_color, edge_width, graphNodeLibrary, nodeLibrary, nodeRegisterLibrary, nodeWidth, notesConfig, portAttrs, portItemArgsY, portMarkup, portTextAttrs, unknownNode } from '../constant';
+import type { ChatVariable, NodeProperties, WorkflowConfig } from '../types';
+import { calcConditionNodeTotalHeight, getConditionNodeCasePortY } from '../utils';
 
 /**
  * Props for useWorkflowGraph hook
@@ -76,6 +75,7 @@ export interface UseWorkflowGraphReturn {
   features?: FeaturesConfigForm;
   /** Get start node output variable list (user-defined + system variables) */
   getStartNodeVariables: () => Array<{ name: string; type: string; readonly?: boolean }>;
+  nodeClick: ({ node }: { node: Node }) => void;
 }
 
 /**
@@ -105,6 +105,17 @@ export const useWorkflowGraph = ({
   const [config, setConfig] = useState<WorkflowConfig | null>(null);
   const [chatVariables, setChatVariables] = useState<ChatVariable[]>([])
   const featuresRef = useRef<FeaturesConfigForm | undefined>(undefined)
+
+  useEffect(() => {
+    if (!graphRef.current) return
+    graphRef.current.getNodes().forEach(node => {
+      const data = node.getData()
+      if (data?.type === 'if-else' || data?.type === 'question-classifier') {
+        console.log('chatVariables', chatVariables)
+        node.setData({ ...data, chatVariables }, { silent: true })
+      }
+    })
+  }, [chatVariables])
 
   useEffect(() => {
     getConfig()
@@ -193,7 +204,7 @@ export const useWorkflowGraph = ({
                 ? Object.entries(group_variables as Record<string, any>).map(([key, value]) => ({ key, value }))
                 : group_variables
             } else if (type === 'http-request' && (key === 'headers' || key === 'params') && config[key] && typeof config[key] === 'object' && !Array.isArray(config[key]) && nodeLibraryConfig.config && nodeLibraryConfig.config[key]) {
-              nodeLibraryConfig.config[key].defaultValue = Object.entries(config[key]).map(([name, value]) => ({ name, value }))
+              nodeLibraryConfig.config[key].defaultValue = Object.entries(config[key]).map(([key, value]) => ({ key, value }))
             } else if (type === 'code' && key === 'code' && config[key] && nodeLibraryConfig.config && nodeLibraryConfig.config[key]) {
               try {
                 nodeLibraryConfig.config[key].defaultValue = decodeURIComponent(atob(config[key] as string))
@@ -211,7 +222,7 @@ export const useWorkflowGraph = ({
           id,
           type,
           name,
-          data: { ...node, ...nodeLibraryConfig },
+          data: { ...node, ...nodeLibraryConfig, ...((type === 'if-else' || type === 'question-classifier') ? { chatVariables } : {}) },
           ...position,
         }
 
@@ -1012,24 +1023,39 @@ export const useWorkflowGraph = ({
 
     graphRef.current.on('node:removed', blankClick)
     // When edge connected, bring connected nodes' ports to front
-    graphRef.current.on('edge:connected', ({ isNew }) => {
-      // Bring edge to front first, then bring child nodes above edges
-      // Parent (loop/iteration) nodes stay behind to avoid covering edges
-      // Reset any port hover state left from dragging
+    graphRef.current.on('edge:connected', ({ isNew, edge }) => {
       if (isNew) {
-        graphRef.current?.getNodes().forEach(node => {
-          if (!node.getData()?.cycle) node.toFront();
-        });
-        graphRef.current?.getEdges().forEach(edge => {
-          const sourceCell = graphRef.current?.getCellById(edge.getSourceCellId());
-          const targetCell = graphRef.current?.getCellById(edge.getTargetCellId());
-          if (sourceCell?.getData()?.cycle || targetCell?.getData()?.cycle) {
-            edge.toFront();
-          }
-        });
-        graphRef.current?.getNodes().forEach(node => {
-          if (node.getData()?.cycle) node.toFront();
-        });
+        const sourceCellId = edge.getSourceCellId()
+        const targetCellId = edge.getTargetCellId()
+        const sourceCell = graphRef.current?.getCellById(sourceCellId);
+        const targetCell = graphRef.current?.getCellById(targetCellId);
+
+        sourceCell?.toFront();
+        targetCell?.toFront()
+        if (['loop', 'iteration'].includes(sourceCell?.getData()?.type)) {
+          graphRef.current?.getEdges().forEach(edge => {
+            const edgeSourceCell = graphRef.current?.getCellById(edge.getSourceCellId());
+            const edgeTargetCell = graphRef.current?.getCellById(edge.getTargetCellId());
+            if (edgeSourceCell?.getData()?.cycle === sourceCellId || edgeTargetCell?.getData()?.cycle === sourceCellId) {
+              edge.toFront();
+            }
+          });
+          graphRef.current?.getNodes().forEach(node => {
+            if (node.getData()?.cycle === sourceCellId) node.toFront();
+          });
+        }
+        if (['loop', 'iteration'].includes(targetCell?.getData()?.type)) {
+          graphRef.current?.getEdges().forEach(edge => {
+            const edgeSourceCell = graphRef.current?.getCellById(edge.getSourceCellId());
+            const edgeTargetCell = graphRef.current?.getCellById(edge.getTargetCellId());
+            if (edgeSourceCell?.getData()?.cycle === targetCellId || edgeTargetCell?.getData()?.cycle === targetCellId) {
+              edge.toFront();
+            }
+          });
+          graphRef.current?.getNodes().forEach(node => {
+            if (node.getData()?.cycle === targetCellId) node.toFront();
+          });
+        }
       }
     });
 
@@ -1174,9 +1200,6 @@ export const useWorkflowGraph = ({
       }) || [];
       const edges = graphRef.current?.getEdges() || []
 
-
-      console.log('config', config)
-
       const params = {
         ...config,
         features: featuresRef.current,
@@ -1233,8 +1256,16 @@ export const useWorkflowGraph = ({
                 itemConfig[key] = {}
                 if (value.length > 0) {
                   value.forEach((vo: any) => {
-                    itemConfig[key][vo.name] = vo.value
+                    itemConfig[key][vo.key] = vo.value
                   })
+                }
+              } else if (data.type === 'http-request' && key === 'body' && data.config[key] && 'defaultValue' in data.config[key]) {
+                const value = data.config[key].defaultValue
+                itemConfig[key] = value
+                if (value.content_type === 'json' && value.data && value.data !== '') {
+                  itemConfig[key].data = value.data.replace(/\u00a0/g, ' ')
+                } else {
+                  itemConfig[key].data = value.data
                 }
               } else if (data.config[key] && 'defaultValue' in data.config[key] && key !== 'knowledge_retrieval') {
                 itemConfig[key] = data.config[key].defaultValue
@@ -1428,6 +1459,7 @@ export const useWorkflowGraph = ({
     setIsHandMode,
     onDrop,
     blankClick,
+    nodeClick,
     deleteEvent,
     copyEvent,
     parseEvent,

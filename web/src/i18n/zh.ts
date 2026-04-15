@@ -116,7 +116,7 @@ export const zh = {
       prompt: '提示词工程',
       skills: '技能库',
       workbench: '工作台',
-      memoryRelated: '记忆相关',
+      memoryRelated: '记忆中枢',
       advancedSettings: '高级设置',
       promptHistory: '我的历史',
       platformManagement: '平台管理',
@@ -831,6 +831,32 @@ export const zh = {
       resetFeaturesTip: '请重新配置【对话功能-文件上传】功能',
       logTitle: '描述',
       range: '范围',
+      body: 'BODY 参数示例',
+      bodyRequestExample: `{
+  "message": "用户消息内容",
+  // string，必填，用户输入的对话内容；
+
+  "conversation_id": "conversation_id",
+  // string，可选，会话ID，多轮对话时传上一次返回的conversation_id，首次不传；
+
+  "user_id": "user_id",
+  // string，可选，终端用户标识，用于区分不同用户的记忆和会话，建议传业务系统的用户ID；
+
+  "variables": {},
+  // object，可选（需要应用配置才支持生效）；
+
+  "stream": false,
+  // boolean，可选，是否流式返回；默认 false，true时返回SSE事件流；
+
+  "thinking": false,
+  // boolean，可选，是否启用深度思考；默认 false（true时需要应用配置才支持生效）；
+
+  "files": [],
+  // array，可选，多模态附件列表（需要应用配置才支持生效）；
+
+  "version":"app_release_id"
+  //string，可选，应用版本ID；指定历史发布版本ID，不传则使用当前生效版本；
+}`,
     },
     table: {
       totalRecords: '共 {{total}} 条记录'
@@ -2109,6 +2135,21 @@ export const zh = {
       return_text_position_enable: '返回文本位置信息',
       return_text_position_enable_desc: '是否返回识别文字的坐标位置',
 
+      OpenClawTool_desc: 'OpenClaw远程Agent',
+      OpenClawTool_features: 'OpenClaw远程Agent —3D打印控制、设备管理等',
+      OpenClawTool_config_desc: '配置OpenClaw Gateway连接信息，需要提供服务地址和API Key。',
+      OpenClawTool_server_url_desc: 'OpenClaw Gateway 服务地址，如 http://xxx.xxx.xxx.xx:xxx',
+      OpenClawTool_api_key_desc: 'OpenClaw API Key，在 OpenClaw 管理后台创建',
+      OpenClawTool_agent_id_desc: '目标 Agent ID，默认为 main，通常无需修改',
+      OpenClawTool_enable: '启用 OpenClaw',
+      agent_id: 'Agent ID',
+      '3dPrinting': '3D 打印',
+      deviceManagement: '设备管理',
+      multimodalInteraction: '多模态交互',
+      remoteAgent: '远程 Agent',
+
+
+
       addCustom: '添加自定义工具',
       editCustom: '编辑自定义工具',
       schema: 'Schema',
@@ -2185,6 +2226,7 @@ export const zh = {
       addvariable: '会话变量',
       addChatVariable: '添加会话变量',
       editChatVariable: '编辑会话变量',
+      invalidJSON: 'JSON 格式不正确',
 
       config: {
         llm: {
@@ -2286,6 +2328,11 @@ export const zh = {
           boolean: {
             "eq": '是',
             "ne": '不是',
+          },
+          file: {
+            "empty": '不存在',
+            "not_empty": '存在',
+            eq: '全都是'
           },
           else_desc: '用于定义当 if 条件不满足时应执行的逻辑。',
           unset: '条件未设置',
@@ -2402,7 +2449,8 @@ export const zh = {
         value: '值',
         addCase: '添加条件',
         addVariable: '添加变量',
-        output: '输出变量'
+        output: '输出变量',
+        duplicateName: '变量名不能重复',
       },
 
       clear: '清空',
@@ -2430,6 +2478,47 @@ export const zh = {
         output_cycle_vars: '最终循环变量',
       },
       sureReplace: '确认替换',
+      checkList: '检查清单',
+      checkListDesc: '发布前确保所有问题均已解决',
+      checkListEmpty: '没有发现问题',
+      notConnected: '此节点尚未连接到其他节点',
+      goto: '转到',
+      cannotBeEmpty: '不能为空',
+      checkListErrors: {
+        'llm.model_id': '模型',
+        'llm.messages': '提示词',
+        'end.output': '回复',
+        'knowledge-retrieval.knowledge_retrieval': '知识库',
+        'parameter-extractor.model_id': '模型',
+        'parameter-extractor.text': '输入变量',
+        'parameter-extractor.params': '提取参数',
+        'memory-read.message': '消息',
+        'memory-read.config_id': '记忆配置',
+        'memory-read.search_switch': '检索模式',
+        'memory-write.messages': '消息',
+        'memory-write.config_id': '记忆配置',
+        'if-else.cases': '条件',
+        'question-classifier.model_id': '模型',
+        'question-classifier.input_variable': '输入变量',
+        'question-classifier.categories': '分类',
+        'iteration.input': '输入变量',
+        'iteration.output': '输出变量',
+        'var-aggregator.group_variables': '变量',
+        'assigner.assignments': '变量',
+        'http-request.url': 'API URL',
+        'http-request.body.data': 'binary文件类型变量',
+        'code.input_variables': '输入变量',
+        'code.code': '代码',
+        'code.output_variables': '输出变量',
+        'jinja-render.mapping': '输入变量',
+        'jinja-render.template': '模板',
+        'document-extractor.file_selector': '文件变量',
+        'list-operator.input_list': '输入变量',
+      },
+      checkListHasErrors: '发布前确认检查清单中所有问题均已解决',
+      variableSelect: {
+        empty: '暂无变量',
+      },
     },
     emotionEngine: {
       emotionEngineConfig: '情感引擎配置',
