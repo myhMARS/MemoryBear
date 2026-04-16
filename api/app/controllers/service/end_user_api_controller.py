@@ -108,8 +108,9 @@ async def create_end_user(
         workspace_id=workspace_id,
         other_id=payload.other_id,
         memory_config_id=memory_config_id,
+        other_name=payload.other_name,
     )
-
+    end_user.other_name = payload.other_name  
     logger.info(f"End user ready: {end_user.id}")
 
     result = {
