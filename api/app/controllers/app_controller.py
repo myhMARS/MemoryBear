@@ -271,6 +271,20 @@ def update_agent_config(
     return success(data=app_schema.AgentConfig.model_validate(cfg))
 
 
+@router.post("/{app_id}/config/reset", summary="重置 Agent 配置为默认状态")
+@cur_workspace_access_guard()
+def reset_agent_config(
+        app_id: uuid.UUID,
+        db: Session = Depends(get_db),
+        current_user=Depends(get_current_user),
+):
+    workspace_id = current_user.current_workspace_id
+    service = AppService(db)
+    cfg = service.reset_agent_config(app_id=app_id, workspace_id=workspace_id)
+    cfg = enrich_agent_config(cfg)
+    return success(data=app_schema.AgentConfig.model_validate(cfg), msg="Agent 配置已重置为默认状态")
+
+
 @router.get("/{app_id}/config", summary="获取 Agent 配置")
 @cur_workspace_access_guard()
 def get_agent_config(
