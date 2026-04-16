@@ -5,6 +5,7 @@
 
 DEFAULT_FREE_PLAN = {
     "name": "记忆体验版",
+    "name_en": "Memory Experience",
     "category": "saas_personal",
     "tier_level": 0,
     "version": "1.0",
@@ -12,9 +13,13 @@ DEFAULT_FREE_PLAN = {
     "price": 0,
     "billing_cycle": "permanent_free",
     "core_value": "感受永久记忆",
+    "core_value_en": "Experience Permanent Memory",
     "tech_support": "社群交流",
+    "tech_support_en": "Community Support",
     "sla_compliance": "无",
+    "sla_compliance_en": "None",
     "page_customization": "无",
+    "page_customization_en": "None",
     "theme_color": "#64748B",
     "quotas": {
         "workspace_quota": 1,
