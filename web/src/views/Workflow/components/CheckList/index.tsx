@@ -118,6 +118,7 @@ const CheckList: FC<CheckListProps> = ({ workflowRef, appId }) => {
   const { setCheckResults, getCheckResults } = useWorkflowStore()
   const results = getCheckResults(appId)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const toolMethodsCacheRef = useRef<Record<string, Array<{ name: string; parameters: Array<{ name: string; required: boolean }> }>>>({})
 
   const runCheck = useCallback(async () => {
     const graph = workflowRef.current?.graphRef?.current
@@ -167,7 +168,10 @@ const CheckList: FC<CheckListProps> = ({ workflowRef, appId }) => {
 
         if (typeof toolId === 'string') {
           try {
-            const methods = await getToolMethods(toolId) as Array<{ name: string; parameters: Array<{ name: string; required: boolean }> }>
+            if (!toolMethodsCacheRef.current[toolId]) {
+              toolMethodsCacheRef.current[toolId] = await getToolMethods(toolId) as Array<{ name: string; parameters: Array<{ name: string; required: boolean }> }>
+            }
+            const methods = toolMethodsCacheRef.current[toolId]
             const operation = toolParameters?.operation
             const method = operation ? methods.find(m => m.name === operation) : methods[0]
             if (method) {
