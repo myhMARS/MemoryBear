@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.core.error_codes import BizCode
 from app.core.exceptions import BusinessException
 from app.models.models_model import ModelProvider, ModelType
-from app.core.models.volcano_chat import VolcanoChatOpenAI
+from app.core.models.compatible_chat import CompatibleChatOpenAI
 
 T = TypeVar("T")
 
@@ -255,11 +255,11 @@ def get_provider_llm_class(config: RedBearModelConfig, type: ModelType = ModelTy
     """根据模型提供商获取对应的模型类"""
     provider = config.provider.lower()
 
-    # dashscope 的 omni 模型使用 OpenAI 兼容模式
+    # dashscope的omni模型 和 volcano模型使用
     if provider == ModelProvider.DASHSCOPE and config.is_omni:
-        return ChatOpenAI
+        return CompatibleChatOpenAI
     if provider == ModelProvider.VOLCANO:
-        return VolcanoChatOpenAI
+        return CompatibleChatOpenAI
     if provider in [ModelProvider.OPENAI, ModelProvider.XINFERENCE, ModelProvider.GPUSTACK]:
         if type == ModelType.LLM:
             return OpenAI
