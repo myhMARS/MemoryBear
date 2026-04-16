@@ -52,12 +52,6 @@ class RedBearModelConfig(BaseModel):
                 f"模型 {self.model_name} 不支持 JSON 输出（capability 中无 'json_output'），已自动关闭 json_output"
             )
             self.json_output = False
-        if self.json_output and self.deep_thinking:
-            logger.warning(
-                f"模型 {self.model_name} json_output 与 deep_thinking 互斥，已自动关闭 deep_thinking"
-            )
-            self.deep_thinking = False
-            self.thinking_budget_tokens = None
         return self
 
 
