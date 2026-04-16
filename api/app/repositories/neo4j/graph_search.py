@@ -8,6 +8,7 @@ import numpy as np
 from app.core.memory.enums import Neo4jNodeType
 from app.core.memory.llm_tools import OpenAIEmbedderClient
 from app.core.memory.utils.data.text_utils import escape_lucene_query
+from app.core.models import RedBearEmbeddings
 from app.repositories.neo4j.cypher_queries import (
     EXPAND_COMMUNITY_STATEMENTS,
     SEARCH_CHUNK_BY_CHUNK_ID,
@@ -358,7 +359,7 @@ async def search_by_embedding(
             USER_ID_QUERY_CYPHER_MAPPING[node_type],
             end_user_id=end_user_id,
         )
-        records = [record for record in records if record if record["embedding"] is not None]
+        records = [record for record in records if record and record.get("embedding") is not None]
         ids = [item['id'] for item in records]
         vectors = [item['embedding'] for item in records]
         sim_res = cosine_similarity_search(query_embedding, vectors, limit=limit)
@@ -469,7 +470,7 @@ async def search_graph(
 
 async def search_graph_by_embedding(
         connector: Neo4jConnector,
-        embedder_client,
+        embedder_client: RedBearEmbeddings | OpenAIEmbedderClient,
         query_text: str,
         end_user_id: str,
         limit: int = 50,
@@ -495,7 +496,10 @@ async def search_graph_by_embedding(
             Neo4jNodeType.PERCEPTUAL
         ]
 
-    embeddings = await embedder_client.response([query_text])
+    if isinstance(embedder_client, RedBearEmbeddings):
+        embeddings = embedder_client.embed_documents([query_text])
+    else:
+        embeddings = await embedder_client.response([query_text])
     if not embeddings or not embeddings[0]:
         logger.warning(f"search_graph_by_embedding: embedding generation failed for '{query_text[:50]}'")
         return {search_key: [] for search_key in include}

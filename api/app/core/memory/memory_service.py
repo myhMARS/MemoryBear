@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.core.memory.enums import StorageType, SearchStrategy
-from app.core.memory.models.service_models import Memory, MemoryContext
+from app.core.memory.models.service_models import MemoryContext, MemorySearchResult
 from app.core.memory.pipelines.memory_read import ReadPipeLine
 from app.db import get_db_context
 from app.services.memory_config_service import MemoryConfigService
@@ -35,9 +35,14 @@ class MemoryService:
     async def write(self, messages: list[dict]) -> str:
         raise NotImplementedError
 
-    async def read(self, query: str, history: list, search_switch: SearchStrategy) -> list[Memory]:
+    async def read(
+            self,
+            query: str,
+            search_switch: SearchStrategy,
+            limit: int = 10,
+    ) -> MemorySearchResult:
         with get_db_context() as db:
-            return await ReadPipeLine(self.ctx, db).run(query, search_switch, limit=10)
+            return await ReadPipeLine(self.ctx, db).run(query, search_switch, limit)
 
     async def forget(self, max_batch: int = 100, min_days: int = 30) -> dict:
         raise NotImplementedError

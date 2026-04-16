@@ -114,7 +114,7 @@ class PerceptualBuilder(BaseBuilder):
                 f"<domain>{self.record.get('domain')}</domain>"
                 f"<keywords>{self.record.get('keywords')}</keywords>"
                 f"<file-type>{self.record.get('file_type')}</file-type>"
-                "</<history-file-info>")
+                "</history-file-info>")
 
 
 class CommunityBuilder(BaseBuilder):

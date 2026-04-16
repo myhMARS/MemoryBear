@@ -1,37 +1,28 @@
 import asyncio
 import logging
 import math
-import time
-
-from pydantic import BaseModel, Field
 
 from app.core.memory.enums import Neo4jNodeType
-from app.core.memory.llm_tools import OpenAIEmbedderClient
 from app.core.memory.memory_service import MemoryContext
-from app.core.memory.models.service_models import Memory
+from app.core.memory.models.service_models import Memory, MemorySearchResult
 from app.core.memory.read_services.result_builder import data_builder_factory
+from app.core.models import RedBearEmbeddings
 from app.repositories.neo4j.graph_search import search_graph, search_graph_by_embedding
 from app.repositories.neo4j.neo4j_connector import Neo4jConnector
 
 logger = logging.getLogger(__name__)
 
-
-class MemorySearchResult(BaseModel):
-    memories: dict[str, list[dict]] = Field(default_factory=dict)
-    content: str = Field(default="")
-    count: int = Field(default=0)
+DEFAULT_ALPHA = 0.7
+DEFAULT_FULLTEXT_SCORE_THRESHOLD = 1
+DEFAULT_COSINE_SCORE_THRESHOLD = 0.5
+DEFAULT_CONTENT_SCORE_THRESHOLD = 0.5
 
 
 class Neo4jSearchService:
-    DEFAULT_ALPHA = 0.6
-    DEFAULT_FULLTEXT_SCORE_THRESHOLD = 1
-    DEFAULT_COSINE_SCORE_THRESHOLD = 0.5
-    DEFAULT_CONTENT_SCORE_THRESHOLD = 0.5
-
     def __init__(
             self,
             ctx: MemoryContext,
-            embedder: OpenAIEmbedderClient,
+            embedder: RedBearEmbeddings,
             includes: list[Neo4jNodeType] | None = None,
             alpha: float = DEFAULT_ALPHA,
             fulltext_score_threshold: float = DEFAULT_FULLTEXT_SCORE_THRESHOLD,
@@ -44,7 +35,7 @@ class Neo4jSearchService:
         self.cosine_score_threshold = cosine_score_threshold
         self.content_score_threshold = content_score_threshold
 
-        self.embedder: OpenAIEmbedderClient = embedder
+        self.embedder: RedBearEmbeddings = embedder
         self.connector: Neo4jConnector | None = None
 
         self.includes = includes
@@ -121,9 +112,12 @@ class Neo4jSearchService:
             kw = float(combined[item_id].get("kw_score", 0) or 0)
             emb = float(combined[item_id].get("embedding_score", 0) or 0)
             base = self.alpha * emb + (1 - self.alpha) * kw
-            combined[item_id]["content_score"] = base + min(1 - base, 0.1 * kw * emb)
+            combined[item_id]["content_score"] = base + min(1 - base, kw * emb)
         results = sorted(combined.values(), key=lambda x: x["content_score"], reverse=True)
-        # results = [res for res in results if res["content_score"] > self.content_score_threshold]
+        # results = [
+        #     res for res in results
+        #     if res["content_score"] > self.content_score_threshold
+        # ]
         results = results[:limit]
 
         logger.info(
@@ -137,14 +131,14 @@ class Neo4jSearchService:
             return items
         scores = [float(it.get("score", 0) or 0) for it in items]
         for it, s in zip(items, scores):
-            it[f"normalized_kw_score"] = 1 / (1 + math.exp(-(s - self.fulltext_score_threshold) / 2))
+            it[f"normalized_kw_score"] = 1 / (1 + math.exp(-(s - self.fulltext_score_threshold) / 2)) if s else 0
         return items
 
     async def search(
             self,
             query: str,
             limit: int = 10,
-    ) -> list[Memory]:
+    ) -> MemorySearchResult:
         async with Neo4jConnector() as connector:
             self.connector = connector
             kw_task = self._keyword_search(query, limit)
@@ -175,4 +169,12 @@ class Neo4jSearchService:
                     query=query
                 ))
         memories.sort(key=lambda x: x.score, reverse=True)
-        return memories[:limit]
+        return MemorySearchResult(memories=memories[:limit])
+
+
+class RAGSearchService:
+    def __init__(self, ctx: MemoryContext):
+        pass
+
+    async def search(self) -> MemorySearchResult:
+        pass
