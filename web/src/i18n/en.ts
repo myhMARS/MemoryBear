@@ -2389,6 +2389,7 @@ Memory Bear: After the rebellion, regional warlordism intensified for several re
           else_desc: 'Used to define the logic that should be executed when the if condition is not met.',
           unset: 'Condition Not Set',
           set: 'Set',
+          addSubVariable: 'Add Sub Variable',
         },
         'http-request': {
           auth: 'Authentication',

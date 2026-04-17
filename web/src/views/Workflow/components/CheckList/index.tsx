@@ -6,6 +6,7 @@ import { Node } from '@antv/x6';
 
 import type { WorkflowRef } from '@/views/ApplicationConfig/types'
 import { nodeLibrary } from '../../constant'
+import { isSubExprSet } from '../../utils'
 import { getToolMethods } from '@/api/tools'
 import RbDrawer from '@/components/RbDrawer'
 import { useWorkflowStore } from '@/store/workflow'
@@ -44,14 +45,13 @@ const specialValidators: Record<string, (val: any) => boolean> = {
   // if-else.cases: every case must have at least one expression, and every expression must be fully set
   'if-else.cases': (val: any[]) => {
     if (!Array.isArray(val) || !val.length) return true
-    return val.some(c => {
-      if (!c?.expressions?.length) return true
-      return c.expressions.some((expr: any) => {
-        if (!expr?.left) return true
-        if (['not_empty', 'empty'].includes(expr.operator)) return false
-        return !(!!expr.left && (!!expr.right || typeof expr.right === 'boolean' || typeof expr.right === 'number'))
-      })
-    })
+    const isExprSet = (expr: any) => {
+      if (expr?.sub_variable_condition?.conditions?.length > 0) return expr.sub_variable_condition?.conditions.every(isSubExprSet)
+      if (!expr.left) return false
+      if (['not_empty', 'empty'].includes(expr.operator)) return true
+      return !!expr.left && (!!expr.right || typeof expr.right === 'boolean' || typeof expr.right === 'number')
+    }
+    return val.some(c => !c?.expressions?.length || c.expressions.some((expr: any) => !isExprSet(expr)))
   },
   // question-classifier.categories: every category must have a value
   'question-classifier.categories': (val: any[]) => !Array.isArray(val) || !val.some(c => c?.class_name && String(c.class_name).trim()),

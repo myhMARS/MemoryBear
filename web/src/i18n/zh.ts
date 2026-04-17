@@ -2350,6 +2350,7 @@ export const zh = {
           else_desc: '用于定义当 if 条件不满足时应执行的逻辑。',
           unset: '条件未设置',
           set: '已设置',
+          addSubVariable: '添加子变量',
         },
         'http-request': {
           auth: '鉴权',
