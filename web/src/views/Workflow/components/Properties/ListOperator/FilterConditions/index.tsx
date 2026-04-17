@@ -56,7 +56,7 @@ const operatorsObj: { [key: string]: SelectProps['options'] } = {
   ]
 }
 
-const typeOptions = ['image', 'document', 'video', 'audio']
+export const typeOptions = ['image', 'document', 'video', 'audio']
 
 const FilterConditions: FC<FilterConditionsProps> = ({
   options,

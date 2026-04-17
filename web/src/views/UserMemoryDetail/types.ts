@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 17:57:15 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-14 16:03:16
+ * @Last Modified time: 2026-04-17 17:57:00
  */
 /**
  * User Memory Detail Types
@@ -178,8 +178,8 @@ export interface EndUser {
   created_at: string;
   updated_at: string;
   profile: {
-    role: string;
-    domain: string;
+    role: string[];
+    domain: string[];
     expertise: string[];
     interests: string[];
   };

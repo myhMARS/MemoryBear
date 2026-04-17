@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 18:33:30 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-14 16:03:41
+ * @Last Modified time: 2026-04-17 17:57:15
  */
 /**
  * End User Profile Component
@@ -89,11 +89,11 @@ const EndUserProfile = forwardRef<EndUserProfileRef, EndUserProfileProps>(({ cla
           </div>
           <div>
             <div className="rb:text-[#7B8085]">{t('userMemory.role')}</div>
-            <div className="rb:mt-0.5">{data?.profile?.role || '-'}</div>
+            <div className="rb:mt-0.5">{data?.profile?.role?.join(' | ') || '-'}</div>
           </div>
           <div>
             <div className="rb:text-[#7B8085]">{t('userMemory.domain')}</div>
-            <div className="rb:mt-0.5">{data?.profile?.domain || '-'}</div>
+            <div className="rb:mt-0.5">{data?.profile?.domain?.join(' | ') || '-'}</div>
           </div>
           <div>
             <div className="rb:text-[#7B8085]">{t('userMemory.expertise')}</div>
