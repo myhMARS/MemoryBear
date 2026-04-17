@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-03-24 15:07:49 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-17 19:13:22
+ * @Last Modified time: 2026-04-17 20:40:47
  */
 
 import { portItemArgsY, conditionNodePortItemArgsY, conditionNodeHeight } from './constant'
@@ -91,6 +91,7 @@ export const getConditionNodeCasePortY = (cases: any[], caseIndex: number) => {
   let portItemArgsYNum = 0;
 
   for (let i = 0; i < caseIndex; i++) {
+    const notHasSub = cases[i]?.expressions?.filter((e: any) => !e?.sub_variable_condition?.conditions || e?.sub_variable_condition?.conditions.length <1).length
     const n = cases[i]?.expressions?.length || 0;
     let casePortItemArgsYNum = n + 1;
     // Add extra y for expressions with all sub_variable_condition set
@@ -110,11 +111,16 @@ export const getConditionNodeCasePortY = (cases: any[], caseIndex: number) => {
       cases[i]?.expressions?.forEach((e: any) => {
         const subs = e?.sub_variable_condition?.conditions;
         if (subs?.length && subs.every(isSubExprSet) && subs.length > 1) {
-          extraExprs += subs.length;
-        } else if (!subs && n > 2) {
-          extraExprs += n - 2;
-        }
+          extraExprs += subs.length + 2;
+        } 
       });
+
+      console.log('extraExprs notHasSub', notHasSub)
+      if (notHasSub > 3) {
+        extraExprs += n - 2 + notHasSub/4;
+      } else {
+        extraExprs += n - 2 + notHasSub/4
+      }
     }
   }
 
