@@ -105,39 +105,54 @@ const Package: FC = () => {
   }, [])
 
   const [activeTab, setActiveTab] = useState('saas_personal');
+
+  const categories = useMemo(() => {
+    const cats = [...new Set(data.map(p => p.category))]
+    return cats
+  }, [data])
+
   const formatTabItems = useMemo(() => {
-    return ['saas_personal', 'commercial_deployment'].map(value => ({
-      value,
-      label: `${t(`package.${value}`)}`,
-    }))
-  }, [t, activeTab])
+    return (['saas_personal', 'commercial_deployment'] as const)
+      .filter(v => categories.includes(v))
+      .map(value => ({ value, label: t(`package.${value}`) }))
+  }, [t, categories])
+
+  const showTabs = categories.length > 1
 
   const handleChangeTab = (value: SegmentedProps['value']) => {
     setActiveTab(value as string);
   }
+
   const getList = () => {
-    getPackageList({ category: activeTab as Package['category'] })
-      .then(res => {
-        setData(res as Package[] || [])
-      })
+    getPackageList({ status: true }).then(res => {
+      setData(res as Package[] || [])
+    })
   }
 
   useEffect(() => {
     getList()
-  }, [activeTab])
+  }, [])
+
+  useEffect(() => {
+    if (categories.length > 0 && !categories.includes(activeTab as Package['category'])) {
+      setActiveTab(categories[0])
+    }
+  }, [categories])
 
   const getKeyWithLanguage = (key: string) => {
     return (language === 'en' ? `${key}_en` : key) as keyof Package
   }
 
+  const filteredData = useMemo(() => data.filter(p => p.category === activeTab), [data, activeTab])
+
   const [currentPage, setCurrentPage] = useState(0)
-  const totalPages = visibleCount > 0 ? Math.ceil(data.length / visibleCount) : 1
+  const totalPages = visibleCount > 0 ? Math.ceil(filteredData.length / visibleCount) : 1
   const showArrows = totalPages > 1
-  const pageData = data.slice(currentPage * visibleCount, (currentPage + 1) * visibleCount)
+  const pageData = filteredData.slice(currentPage * visibleCount, (currentPage + 1) * visibleCount)
 
   useEffect(() => {
     setCurrentPage(0)
-  }, [activeTab, visibleCount])
+  }, [activeTab, visibleCount, filteredData])
 
   const handleChoosePlan = () => {
     window.open(`https://docs.redbearai.com/s/${language || 'en'}-memorybear`, '_blank')
@@ -145,14 +160,16 @@ const Package: FC = () => {
 
   return (
     <>
-      <Flex justify="space-between" className="rb:mb-4!">
-        <PageTabs
-          value={activeTab}
-          options={formatTabItems}
-          onChange={handleChangeTab}
-        />
-      </Flex>
-      <BodyWrapper empty={data.length < 1}>
+      {showTabs && (
+        <Flex justify="space-between" className="rb:mb-4!">
+          <PageTabs
+            value={activeTab}
+            options={formatTabItems}
+            onChange={handleChangeTab}
+          />
+        </Flex>
+      )}
+      <BodyWrapper empty={filteredData.length < 1}>
         <div ref={scrollRef} className="rb:relative rb:mx-9">
           {showArrows && (
             <Flex
@@ -227,12 +244,18 @@ const Package: FC = () => {
                     <Divider className="rb:my-4" />
 
                     {/* Features */}
-                    <Flex gap={12} vertical className="rb:space-y-3 rb:mb-4 rb:h-[calc(100vh-401px)]! rb:overflow-y-auto">
+                    <Flex gap={12} vertical
+                      className={clsx("rb:space-y-3 rb:mb-4 rb:overflow-y-auto", {
+                        'rb:h-[calc(100vh-401px)]!': showTabs,
+                        'rb:h-[calc(100vh-346px)]!': !showTabs
+                      })}
+                    >
                       {billingUnits.map(({ key, unit, icon }) => {
                         const value = pkg?.quotas?.[key as keyof Package['quotas']];
                         if (value === undefined || value === null) return null;
                         return (
                           <UnitWrapper
+                            key={key}
                             titleKey={key}
                             value={value}
                             unit={unit}
