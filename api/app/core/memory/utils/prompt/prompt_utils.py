@@ -97,7 +97,7 @@ async def render_statement_extraction_prompt(
     })
 
     return rendered_prompt
-
+# TODO temporal与statement prompt合并在一起，以下代码不需要
 async def render_temporal_extraction_prompt(
     ref_dates: dict,
     statement: dict,
@@ -198,6 +198,7 @@ def render_entity_dedup_prompt(
 
 #     Args:
 #         entity_a: Dict of entity A attributes
+
 async def render_triplet_extraction_prompt(
     statement: str,
     chunk_content: str,

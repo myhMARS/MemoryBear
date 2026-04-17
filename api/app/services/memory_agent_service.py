@@ -367,6 +367,33 @@ class MemoryAgentService:
                     ref_id='',
                     language=language
                 )
+
+                # ── 影子运行：新流水线静默执行，只记录日志不影响主流程 ──
+                import os
+                if os.getenv("SHADOW_PIPELINE_ENABLED", "false").lower() == "true":
+                    try:
+                        from app.core.memory.memory_service import MemoryService
+                        import copy
+
+                        shadow_messages = copy.deepcopy(messages)
+                        shadow_service = MemoryService(
+                            memory_config=memory_config,
+                            end_user_id=end_user_id,
+                        )
+                        shadow_result = await shadow_service.write(
+                            messages=shadow_messages,
+                            language=language,
+                            ref_id='',
+                            is_pilot_run=True,  # 试运行模式：只萃取不写入，避免重复写入 Neo4j
+                        )
+                        logger.info(
+                            f"[Shadow] 新流水线影子运行完成: status={shadow_result.status}, "
+                            f"elapsed={shadow_result.elapsed_seconds:.2f}s, "
+                            f"extraction={shadow_result.extraction}"
+                        )
+                    except Exception as shadow_err:
+                        logger.warning(f"[Shadow] 新流水线影子运行失败（不影响主流程）: {shadow_err}")
+                # ── 影子运行结束 ──
                 for lang in ["zh", "en"]:
                     deleted = await InterestMemoryCache.delete_interest_distribution(
                         end_user_id, lang

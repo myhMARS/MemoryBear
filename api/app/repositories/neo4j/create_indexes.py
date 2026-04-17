@@ -17,10 +17,9 @@ async def create_fulltext_indexes():
         #     CREATE FULLTEXT INDEX dialoguesFulltext IF NOT EXISTS FOR (d:Dialogue) ON EACH [d.content]
         #     OPTIONS { indexConfig: { `fulltext.analyzer`: 'cjk' } }
         # """)
-        # 创建 Entities 索引
+        # 创建 Entities 索引 (name + description + aliases)
         await connector.execute_query("""
-            CREATE FULLTEXT INDEX entitiesFulltext IF NOT EXISTS 
-            FOR (e:ExtractedEntity) ON EACH [e.name, e.description, e.aliases]
+            CREATE FULLTEXT INDEX entitiesFulltext IF NOT EXISTS FOR (e:ExtractedEntity) ON EACH [e.name, e.description, e.aliases]
             OPTIONS { indexConfig: { `fulltext.analyzer`: 'cjk' } }
         """)
 
