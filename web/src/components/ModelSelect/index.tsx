@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-03-07 16:49:59 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-17 10:05:23
+ * @Last Modified time: 2026-04-17 10:11:54
  */
 import { type FC, useEffect, useState } from 'react';
 import { Select, Flex, Space } from 'antd';
@@ -13,10 +13,6 @@ import { getModelList } from '@/api/models';
 import type { Query, Model } from '@/views/ModelManagement/types';
 import { getListLogoUrl } from '@/views/ModelManagement/utils';
 import Tag from '@/components/Tag';
-
-export interface ModelSelectRef {
-  options: Model[];
-}
 
 /** Extends AntD SelectProps; omits filterOption since it's handled internally */
 interface ModelSelectProps extends SelectProps {
