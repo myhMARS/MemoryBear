@@ -103,7 +103,7 @@ class IfElseNode(BaseNode):
                     left_value = None
 
                 if expression.sub_variable_condition is not None and isinstance(left_value, list):
-                    evaluator = ArrayFileContainsOperator(left_value, expression.sub_variable_condition)
+                    evaluator = ArrayFileContainsOperator(left_value, expression.sub_variable_condition, variable_pool)
                 else:
                     evaluator = ConditionExpressionResolver.resolve_by_value(left_value)(
                         variable_pool,

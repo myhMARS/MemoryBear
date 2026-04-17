@@ -10,8 +10,18 @@ class SubVariableConditionItem(BaseModel):
     """A single condition on a file object's field, used inside sub_variable_condition."""
     key: str = Field(..., description="Field name of the file object, e.g. type, size, name")
     operator: ComparisonOperator = Field(..., description="Comparison operator")
-    value: Any = Field(default=None, description="Value to compare with")
-    var_type: str = Field(default="string", description="Field value type: string or number")
+    value: Any = Field(default=None, description="Value to compare with, or variable selector when input_type=variable")
+    input_type: ValueInputType = Field(default=ValueInputType.CONSTANT, description="constant or variable")
+
+    @field_validator("input_type", mode="before")
+    @classmethod
+    def lower_input_type(cls, v):
+        if isinstance(v, str):
+            try:
+                return ValueInputType(v.lower())
+            except ValueError:
+                raise ValueError(f"Invalid input_type: {v}")
+        return v
 
 
 class SubVariableCondition(BaseModel):

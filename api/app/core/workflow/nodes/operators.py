@@ -396,47 +396,49 @@ class NoneObjectComparisonOperator:
 
 
 class ArrayFileContainsOperator:
-    """Handles contains/not_contains on array[file] with sub_variable_condition.
+    """Handles contains/not_contains on array[file] with sub_variable_condition."""
 
-    Evaluates whether any (contains) or no (not_contains) file element
-    in the array satisfies all sub-conditions.
-    """
-
-    def __init__(self, left_value: list[dict], sub_variable_condition: Any):
+    def __init__(self, left_value: list[dict], sub_variable_condition: Any, pool: VariablePool | None = None):
         self.left_value = left_value
         self.sub_variable_condition = sub_variable_condition
+        self.pool = pool
+
+    def _resolve_value(self, cond: Any) -> Any:
+        if cond.input_type == ValueInputType.VARIABLE and self.pool is not None:
+            pattern = r"\{\{\s*(.*?)\s*\}\}"
+            selector = re.sub(pattern, r"\1", str(cond.value)).strip()
+            return self.pool.get_value(selector, default=None, strict=False)
+        return cond.value
 
     def _match_item(self, file_item: dict) -> bool:
-        """Check if a single file dict satisfies all sub-conditions."""
         results = []
         for cond in self.sub_variable_condition.conditions:
             field_val = file_item.get(cond.key)
-            result = self._eval_sub(field_val, cond)
+            expected = self._resolve_value(cond)
+            result = self._eval_sub(field_val, cond.operator.value, expected)
             results.append(result)
         if self.sub_variable_condition.logical_operator.value == "and":
             return all(results)
         return any(results)
 
     @staticmethod
-    def _eval_sub(field_val: Any, cond: Any) -> bool:
-        op = cond.operator.value
-        expected = cond.value
+    def _eval_sub(field_val: Any, op: str, expected: Any) -> bool:
         if field_val is None:
-            return op in ("empty", "not_empty") and op == "empty"
+            return op == "empty"
         match op:
-            case "eq":         return str(field_val) == str(expected)
-            case "ne":         return str(field_val) != str(expected)
-            case "contains":   return isinstance(field_val, str) and str(expected) in field_val
+            case "eq":           return str(field_val) == str(expected)
+            case "ne":           return str(field_val) != str(expected)
+            case "contains":     return isinstance(field_val, str) and str(expected) in field_val
             case "not_contains": return isinstance(field_val, str) and str(expected) not in field_val
-            case "in":         return field_val in (expected if isinstance(expected, list) else [expected])
-            case "not_in":     return field_val not in (expected if isinstance(expected, list) else [expected])
-            case "gt":         return isinstance(field_val, (int, float)) and field_val > float(expected)
-            case "ge":         return isinstance(field_val, (int, float)) and field_val >= float(expected)
-            case "lt":         return isinstance(field_val, (int, float)) and field_val < float(expected)
-            case "le":         return isinstance(field_val, (int, float)) and field_val <= float(expected)
-            case "empty":      return field_val in (None, "", 0)
-            case "not_empty":  return field_val not in (None, "", 0)
-            case _:            return False
+            case "in":           return field_val in (expected if isinstance(expected, list) else [expected])
+            case "not_in":       return field_val not in (expected if isinstance(expected, list) else [expected])
+            case "gt":           return isinstance(field_val, (int, float)) and field_val > float(expected)
+            case "ge":           return isinstance(field_val, (int, float)) and field_val >= float(expected)
+            case "lt":           return isinstance(field_val, (int, float)) and field_val < float(expected)
+            case "le":           return isinstance(field_val, (int, float)) and field_val <= float(expected)
+            case "empty":        return field_val in (None, "", 0)
+            case "not_empty":    return field_val not in (None, "", 0)
+            case _:              return False
 
     def contains(self) -> bool:
         return any(self._match_item(f) for f in self.left_value if isinstance(f, dict))
