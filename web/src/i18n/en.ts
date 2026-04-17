@@ -15,6 +15,10 @@ export const en = {
       startedDesc: 'Understand the core functions of the platform and quickly get started through graphic guidance and video tutorials. Includes a full process demonstration from creating a space to publishing an application.',
       spaceTitle:'Memory Bear Intelligent Space Management Platform',
       spaceSubTitle: 'Making it easier to implement intelligent models - a one-stop platform for model management, knowledge building, workflow orchestration, and spatial operations',
+      workspace_quota: 'Spaces',
+      skill_quota: 'Skills',
+      app_quota: 'Apps',
+      model_quota: 'Models',
     },
     version:{
       releaseDate: 'Release Date',
@@ -2896,8 +2900,8 @@ Memory Bear: After the rebellion, regional warlordism intensified for several re
       context_details: 'Preference Details',
       supporting_evidence: 'Preference Source',
       specific_examples: 'Source',
-      preferencesTip: 'Reminder: Click on the preferences above to view the corresponding Lenovo network',
-      wordEmpty: 'There is currently no Lenovo network available',
+      preferencesTip: 'Reminder: Click on the preferences above to view the corresponding association network',
+      wordEmpty: 'There is currently no association network available',
       noData: 'Portrait data does not exist, please click the refresh button to initialize',
     },
     shortTermDetail: {
@@ -3084,6 +3088,8 @@ Memory Bear: After the rebellion, regional warlordism intensified for several re
       ontology_project_quota: 'Ontology Project',
       model_quota: 'Model Quota',
       editPackage: 'Edit Package',
+
+      viewDetail: 'View full package details',
     },
   },
 };
