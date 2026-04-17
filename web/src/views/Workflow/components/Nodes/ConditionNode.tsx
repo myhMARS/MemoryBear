@@ -109,7 +109,7 @@ const ConditionNode: ReactShapeConfig['component'] = ({ node }) => {
                       }
                       </Flex>
                       {expression.sub_variable_condition?.conditions?.length > 0 && expression.sub_variable_condition?.conditions.every(isSubExprSet)
-                        ? <div className="rb-border-l rb:ml-2">
+                        ? <div className="rb-border-l rb:ml-2 rb:mt-1.5">
                           {expression.sub_variable_condition?.conditions.map((sub: any, sIndex: number) => (
                             <div key={sIndex} className="rb:relative">
                               {expression.sub_variable_condition?.conditions.length > 1 && sIndex > 0 && <div className="rb:absolute rb:-top-2 rb:right-2 rb:text-[10px] rb:text-[#155EEF] rb:font-medium rb:leading-3.5 rb:text-right rb:pr-0.5">{expression.sub_variable_condition?.logical_operator?.toLocaleUpperCase()}</div>}
