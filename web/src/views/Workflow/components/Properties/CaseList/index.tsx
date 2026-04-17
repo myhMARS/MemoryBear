@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-09 18:24:53 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-17 19:48:59
+ * @Last Modified time: 2026-04-17 19:58:13
  */
 import { useEffect, useMemo, type FC } from 'react'
 import clsx from 'clsx'
@@ -45,7 +45,7 @@ interface CaseItem {
 }
 interface CaseListProps {
   value?: CaseItem[];
-  onChange?: (value: Array<{ logical_operator: 'and' | 'or'; expressions: { left: string; operator: string; right: string; }[] }>) => void;
+  onChange?: (value: CaseItem[]) => void;
   options: Suggestion[];
   name: string;
   selectedNode?: any;
@@ -221,7 +221,7 @@ const ArrayFileSubConditions: FC<ArrayFileSubConditionsProps> = ({ conditionFiel
                                 onChange={(value: string) => {
                                   form.setFieldValue([name, caseIndex, 'expressions', conditionIndex, 'sub_variable_condition', 'conditions', subIndex], {
                                     key: value,
-                                    input_type: value === 'size' ? 'Constant' : undefined,
+                                    input_type: value === 'size' ? 'constant' : undefined,
                                     value: undefined,
                                     operator: value === 'size' ? 'ge' : 'eq',
                                   });
@@ -488,7 +488,7 @@ const CaseList: FC<CaseListProps> = ({
       left: newValue,
       operator: undefined,
       right: undefined,
-      input_type: 'Constant'
+      input_type: 'constant'
     });
   };
 
