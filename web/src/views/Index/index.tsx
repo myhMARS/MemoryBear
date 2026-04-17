@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Space, Button, Row, Col, Flex } from 'antd';
+import { Space, Button, Flex } from 'antd';
 
 import TopCardList from './components/TopCardList';
 import GuideCard from './components/GuideCard';

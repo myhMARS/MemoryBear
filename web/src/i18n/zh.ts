@@ -15,6 +15,10 @@ export const zh = {
       startedDesc: '了解该平台的核心功能，并通过图形指引和视频教程快速上手。包含从创建空间到发布应用程序的整个操作流程演示。',
       spaceTitle:'记忆熊智能空间管理平台',
       spaceSubTitle: '使智能模型的实施变得更加容易——一个集模型管理、知识构建、工作流程编排以及空间操作于一体的综合性平台',
+      workspace_quota: '空间',
+      skill_quota: '技能',
+      app_quota: '应用',
+      model_quota: '模型',
     },
     version:{
       releaseDate: '发布日',
@@ -3043,6 +3047,8 @@ export const zh = {
       ontology_project_quota: '本体工程',
       model_quota: '可负载模型数量',
       editPackage: '编辑套餐',
+
+      viewDetail: '查看完整套餐详情',
     },
   },
 }
