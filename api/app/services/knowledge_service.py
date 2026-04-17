@@ -104,7 +104,7 @@ def create_knowledge(
         if not knowledge.image2text_id:
             image2text_models = db.query(ModelConfig).filter(
                 ModelConfig.tenant_id == tenant_id,
-                ModelConfig.type.in_([ModelType.CHAT.value, ModelType.IMAGE.value]),
+                ModelConfig.type.in_([ModelType.CHAT.value]),
                 ModelConfig.capability.contains(["vision"]),
                 ModelConfig.is_active == True,
                 ModelConfig.is_composite == False
