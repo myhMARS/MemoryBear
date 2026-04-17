@@ -1478,59 +1478,6 @@ class AppService:
         logger.info("获取 Agent 默认模型参数成功", extra={"app_id": str(app_id)})
         return default_model_parameters
 
-    def reset_agent_config(
-            self,
-            *,
-            app_id: uuid.UUID,
-            workspace_id: Optional[uuid.UUID] = None
-    ) -> "ModelParameters":
-        """将 Agent 模型参数重置为默认值（不影响其他配置）
-
-        Args:
-            app_id: 应用ID
-            workspace_id: 工作空间ID（用于权限验证）
-
-        Returns:
-            ModelParameters: 重置后的模型参数
-        """
-        logger.info("重置 Agent 模型参数为默认值", extra={"app_id": str(app_id)})
-
-        app = self._get_app_or_404(app_id)
-
-        if app.type != "agent":
-            raise BusinessException("只有 Agent 类型应用支持 Agent 配置", BizCode.APP_TYPE_NOT_SUPPORTED)
-
-        self._validate_app_writable(app, workspace_id)
-
-        from app.schemas.app_schema import ModelParameters
-        default_model_parameters = ModelParameters()
-
-        stmt = select(AgentConfig).where(AgentConfig.app_id == app_id, AgentConfig.is_active.is_(True)).order_by(
-            AgentConfig.updated_at.desc())
-        agent_cfg: Optional[AgentConfig] = self.db.scalars(stmt).first()
-        now = datetime.datetime.now()
-
-        if agent_cfg:
-            agent_cfg.default_model_config_id = None
-            agent_cfg.model_parameters = default_model_parameters
-            agent_cfg.updated_at = now
-        else:
-            agent_cfg = AgentConfig(
-                id=uuid.uuid4(),
-                app_id=app_id,
-                default_model_config_id=None,
-                model_parameters=default_model_parameters,
-                is_active=True,
-                created_at=now,
-                updated_at=now,
-            )
-            self.db.add(agent_cfg)
-
-        self.db.commit()
-
-        logger.info("Agent 模型参数重置成功", extra={"app_id": str(app_id)})
-        return default_model_parameters
-
     def _create_default_agent_config(self, app_id: uuid.UUID) -> AgentConfig:
         """创建默认的 Agent 配置模板（不保存到数据库）
 

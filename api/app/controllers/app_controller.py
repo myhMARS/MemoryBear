@@ -271,9 +271,9 @@ def update_agent_config(
     return success(data=app_schema.AgentConfig.model_validate(cfg))
 
 
-@router.post("/{app_id}/model/parameters/reset", summary="获取 Agent 模型参数默认配置")
+@router.get("/{app_id}/model/parameters/default", summary="获取 Agent 模型参数默认配置")
 @cur_workspace_access_guard()
-def reset_agent_model_parameters(
+def get_agent_model_parameters(
         app_id: uuid.UUID,
         db: Session = Depends(get_db),
         current_user=Depends(get_current_user),
