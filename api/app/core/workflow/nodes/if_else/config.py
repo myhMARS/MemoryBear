@@ -1,6 +1,6 @@
 """Condition Configuration"""
 from typing import Any
-from pydantic import Field, BaseModel, field_validator, model_validator
+from pydantic import Field, BaseModel, field_validator
 
 from app.core.workflow.nodes.base_config import BaseNodeConfig
 from app.core.workflow.nodes.enums import ComparisonOperator, LogicOperator, ValueInputType
@@ -57,48 +57,21 @@ class ConditionDetail(BaseModel):
         return v
 
 
-class ConditionGroup(BaseModel):
-    """A group of conditions combined by group_operator (AND/OR)"""
-
-    group_operator: LogicOperator = Field(
-        default=LogicOperator.AND,
-        description="Logical operator used to combine conditions within this group"
-    )
-
-    conditions: list[ConditionDetail] = Field(
-        ...,
-        description="List of conditions within this group"
-    )
-
-
 class ConditionBranchConfig(BaseModel):
     """Configuration for a conditional branch.
 
-    logical_operator controls how groups are combined.
-    Each group's group_operator controls how conditions within it are combined.
+    logical_operator controls how all expressions are combined (AND/OR).
     """
 
     logical_operator: LogicOperator = Field(
         default=LogicOperator.AND,
-        description="Logical operator used to combine condition groups"
+        description="Logical operator used to combine all conditions"
     )
 
-    expressions: list[ConditionGroup] = Field(
-        ...,
-        description="List of condition groups within this branch"
+    expressions: list[ConditionDetail] = Field(
+        default_factory=list,
+        description="List of conditions within this branch"
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_flat_expressions(cls, data):
-        """Migrate legacy flat expressions (list[ConditionDetail]) to list[ConditionGroup]."""
-        exprs = data.get("expressions", [])
-        if exprs and isinstance(exprs[0], dict) and "left" in exprs[0]:
-            data["expressions"] = [{
-                "group_operator": data.get("logical_operator", "and"),
-                "conditions": exprs
-            }]
-        return data
 
 
 class IfElseNodeConfig(BaseNodeConfig):

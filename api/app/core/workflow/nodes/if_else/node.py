@@ -26,28 +26,20 @@ class IfElseNode(BaseNode):
     def _extract_input(self, state: WorkflowState, variable_pool: VariablePool) -> dict[str, Any]:
         result = []
         for case in self.typed_config.cases:
-            groups = []
-            for group in case.expressions:
-                conditions = []
-                for condition in group.conditions:
-                    conditions.append({
-                        "left": self.get_variable(condition.left, variable_pool, strict=False),
-                        "right": condition.right
-                        if condition.input_type == ValueInputType.CONSTANT or condition.right is None
-                        else self.get_variable(condition.right, variable_pool, strict=False),
-                        "operator": str(condition.operator),
-                    })
-                groups.append({
-                    "group_operator": str(group.group_operator),
-                    "conditions": conditions,
+            conditions = []
+            for condition in case.expressions:
+                conditions.append({
+                    "left": self.get_variable(condition.left, variable_pool, strict=False),
+                    "right": condition.right
+                    if condition.input_type == ValueInputType.CONSTANT or condition.right is None
+                    else self.get_variable(condition.right, variable_pool, strict=False),
+                    "operator": str(condition.operator),
                 })
             result.append({
-                "expressions": groups,
+                "expressions": conditions,
                 "logical_operator": str(case.logical_operator),
             })
-        return {
-            "cases": result
-        }
+        return {"cases": result}
 
     @staticmethod
     def _evaluate(operator, instance: CompareOperatorInstance) -> Any:
@@ -99,36 +91,30 @@ class IfElseNode(BaseNode):
         conditions = []
 
         for case_branch in self.typed_config.cases:
-            group_results = []
-            for group in case_branch.expressions:
-                condition_results = []
-                for condition in group.conditions:
-                    pattern = r"\{\{\s*(.*?)\s*\}\}"
-                    left_string = re.sub(pattern, r"\1", condition.left).strip()
-                    try:
-                        left_value = self.get_variable(left_string, variable_pool)
-                    except KeyError:
-                        left_value = None
+            condition_results = []
+            for condition in case_branch.expressions:
+                pattern = r"\{\{\s*(.*?)\s*\}\}"
+                left_string = re.sub(pattern, r"\1", condition.left).strip()
+                try:
+                    left_value = self.get_variable(left_string, variable_pool)
+                except KeyError:
+                    left_value = None
 
-                    # array[file] + sub_variable_condition: use ArrayFileContainsOperator directly
-                    if condition.sub_variable_condition is not None and isinstance(left_value, list):
-                        evaluator = ArrayFileContainsOperator(left_value, condition.sub_variable_condition)
-                    else:
-                        evaluator = ConditionExpressionResolver.resolve_by_value(left_value)(
-                            variable_pool,
-                            condition.left,
-                            condition.right,
-                            condition.input_type
-                        )
-                    condition_results.append(self._evaluate(condition.operator, evaluator))
-                if group.group_operator == LogicOperator.AND:
-                    group_results.append(all(condition_results))
+                if condition.sub_variable_condition is not None and isinstance(left_value, list):
+                    evaluator = ArrayFileContainsOperator(left_value, condition.sub_variable_condition)
                 else:
-                    group_results.append(any(condition_results))
+                    evaluator = ConditionExpressionResolver.resolve_by_value(left_value)(
+                        variable_pool,
+                        condition.left,
+                        condition.right,
+                        condition.input_type
+                    )
+                condition_results.append(self._evaluate(condition.operator, evaluator))
+
             if case_branch.logical_operator == LogicOperator.AND:
-                conditions.append(all(group_results))
+                conditions.append(all(condition_results))
             else:
-                condition_res = any(group_results)
+                condition_res = any(condition_results)
                 conditions.append(condition_res)
                 if condition_res:
                     return conditions
