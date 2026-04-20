@@ -292,11 +292,10 @@ class RateLimiterService:
         key = f"rate_limit:qps:{api_key_id}"
 
         async with self.redis.pipeline() as pipe:
-            pipe.zremrangebyscore(key, 0, window_start)
-            pipe.zcard(key)
+            pipe.zcount(key, window_start, "+inf")
             results = await pipe.execute()
 
-        current = results[1]
+        current = results[0]
 
         if current >= limit:
             return False, {
