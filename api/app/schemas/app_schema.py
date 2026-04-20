@@ -44,6 +44,8 @@ class FileInput(BaseModel):
     upload_file_id: Optional[uuid.UUID] = Field(None, description="已上传文件ID（local_file时必填）")
     url: Optional[str] = Field(None, description="远程URL（remote_url时必填）")
     file_type: Optional[str] = Field(None, description="具体文件格式（如image/jpg、audio/wav、document/docx、video/mp4）")
+    name: Optional[str] = Field(None, description="文件名")
+    size: Optional[int] = Field(None, description="文件大小（字节）")
 
     _content = None
 
@@ -243,6 +245,7 @@ class ModelParameters(BaseModel):
     stop: Optional[List[str]] = Field(default=None, description="停止序列")
     deep_thinking: bool = Field(default=False, description="是否启用深度思考模式（需模型支持，如 DeepSeek-R1、QwQ 等）")
     thinking_budget_tokens: Optional[int] = Field(default=None, ge=1024, le=131072, description="深度思考 token 预算（仅部分模型支持）")
+    json_output: bool = Field(default=False, description="是否强制 JSON 格式输出（需模型支持 json_output 能力）")
 
 
 class VariableDefinition(BaseModel):
