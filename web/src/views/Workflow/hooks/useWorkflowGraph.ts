@@ -2,9 +2,10 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 15:17:48 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-07 23:17:50
+ * @Last Modified time: 2026-04-20 16:00:26
  */
-import { Clipboard, Graph, Keyboard, MiniMap, Node, Snapline, type Edge } from '@antv/x6';
+import { Clipboard, Graph, Keyboard, MiniMap, Node, Snapline, History, type Edge } from '@antv/x6';
+import type { HistoryCommand as Command } from '@antv/x6/lib/plugin/history/type';
 import { register } from '@antv/x6-react-shape';
 import type { PortMetadata } from '@antv/x6/lib/model/port';
 import { App } from 'antd';
@@ -63,6 +64,14 @@ export interface UseWorkflowGraphReturn {
   copyEvent: () => boolean | void;
   /** Handler for paste keyboard event */
   parseEvent: () => boolean | void;
+  /** Whether undo is available */
+  canUndo: boolean;
+  /** Whether redo is available */
+  canRedo: boolean;
+  /** Undo last action */
+  undo: () => void;
+  /** Redo last undone action */
+  redo: () => void;
   /** Function to save workflow configuration */
   handleSave: (flag?: boolean) => Promise<unknown>;
   /** Chat variables for workflow */
@@ -105,6 +114,8 @@ export const useWorkflowGraph = ({
   const [config, setConfig] = useState<WorkflowConfig | null>(null);
   const [chatVariables, setChatVariables] = useState<ChatVariable[]>([])
   const featuresRef = useRef<FeaturesConfigForm | undefined>(undefined)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
 
   useEffect(() => {
     if (!graphRef.current) return
@@ -469,6 +480,8 @@ export const useWorkflowGraph = ({
           graphRef.current.getNodes().forEach(node => {
             if (node.getData()?.cycle) node.toFront();
           });
+          graphRef.current.enableHistory()
+          graphRef.current.cleanHistory()
         }
       }, 200)
     }
@@ -504,6 +517,22 @@ export const useWorkflowGraph = ({
         global: true,
       }),
     );
+    graphRef.current.use(
+      new History({
+        enabled: false,
+        beforeAddCommand(_event, args: any) {
+          const event = args?.key ? `cell:change:${args.key}` : _event;
+          if (event.startsWith('cell:change:') &&
+            event !== 'cell:change:position' &&
+            event !== 'cell:change:source' &&
+            event !== 'cell:change:target') return false;
+        },
+      }),
+    );
+    graphRef.current.on('history:change', ({ cmds }: { cmds: Command[] }) => {
+      setCanUndo(graphRef.current?.canUndo() ?? false)
+      setCanRedo(graphRef.current?.canRedo() ?? false)
+    })
   };
   // 显示/隐藏连接桩
   // const showPorts = (show: boolean) => {
@@ -1077,6 +1106,9 @@ export const useWorkflowGraph = ({
     graphRef.current.bindKey(['ctrl+v', 'cmd+v'], parseEvent);
     // Delete selected nodes and edges
     graphRef.current.bindKey(['ctrl+d', 'cmd+d', 'delete', 'backspace'], deleteEvent);
+    // Undo / Redo
+    graphRef.current.bindKey(['ctrl+z', 'cmd+z'], () => { graphRef.current?.undo(); return false; });
+    graphRef.current.bindKey(['ctrl+y', 'cmd+y', 'ctrl+shift+z', 'cmd+shift+z'], () => { graphRef.current?.redo(); return false; });
 
   };
 
@@ -1390,6 +1422,9 @@ export const useWorkflowGraph = ({
     return userVars
   }
 
+  const undo = () => graphRef.current?.undo()
+  const redo = () => graphRef.current?.redo()
+
   const handleSaveFeaturesConfig = (value?: FeaturesConfigForm) => {
     const { statement = '' } = value?.opening_statement || {}
     featuresRef.current = value
@@ -1449,5 +1484,9 @@ export const useWorkflowGraph = ({
     handleSaveFeaturesConfig,
     features: featuresRef.current,
     getStartNodeVariables,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
   };
 };
