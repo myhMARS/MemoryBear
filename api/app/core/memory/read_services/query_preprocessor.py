@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import datetime
 
 from app.core.memory.prompt import prompt_manager
 from app.core.memory.utils.llm.llm_utils import StructResponse
@@ -23,17 +24,16 @@ class QueryPreprocessor:
     async def split(query: str, llm_client: RedBearLLM):
         system_prompt = prompt_manager.render(
             name="problem_split",
-            history=[],
-            sentence=query,
+            datetime=datetime.now().strftime("%Y-%m-%d"),
         )
-        messages = [{"role": "system", "content": system_prompt}]
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query},
+        ]
         try:
             sub_queries = await llm_client.ainvoke(messages) | StructResponse(mode='json')
+            queries = sub_queries["questions"]
         except Exception as e:
             logger.error(f"[QueryPreprocessor] Sub-question segmentation failed - {e}")
-            sub_queries = None
-        return sub_queries or query
-
-    @staticmethod
-    async def extension(query: str, llm_client: RedBearLLM):
-        pass
+            queries = [query]
+        return queries

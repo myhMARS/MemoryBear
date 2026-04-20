@@ -22,6 +22,10 @@ class BaseBuilder(ABC):
     def score(self) -> float:
         return self.record.get("content_score", 0.0) or 0.0
 
+    @property
+    def id(self) -> str:
+        return self.record.get("id")
+
 
 T = TypeVar("T", bound=BaseBuilder)
 

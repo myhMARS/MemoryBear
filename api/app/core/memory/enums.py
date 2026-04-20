@@ -27,3 +27,5 @@ class Neo4jNodeType(StrEnum):
     PERCEPTUAL = "Perceptual"
     STATEMENT = "Statement"
 
+    RAG = "Rag"
+

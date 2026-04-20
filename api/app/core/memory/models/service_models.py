@@ -1,3 +1,5 @@
+from typing import Self
+
 from pydantic import BaseModel, Field, field_serializer, ConfigDict, model_validator, computed_field
 
 from app.core.memory.enums import Neo4jNodeType, StorageType
@@ -21,6 +23,7 @@ class Memory(BaseModel):
     content: str = Field(default="")
     data: dict = Field(default_factory=dict)
     query: str = Field(...)
+    id: str = Field(...)
 
     @field_serializer("source")
     def serialize_source(self, v) -> str:
@@ -39,3 +42,24 @@ class MemorySearchResult(BaseModel):
     @property
     def count(self) -> int:
         return len(self.memories)
+
+    def filter(self, score_threshold: float) -> Self:
+        self.memories = [memory for memory in self.memories if memory.score >= score_threshold]
+        return self
+
+    def __add__(self, other: "MemorySearchResult") -> "MemorySearchResult":
+        if not isinstance(other, MemorySearchResult):
+            raise TypeError("")
+
+        merged = MemorySearchResult(memories=list(self.memories))
+
+        ids = {m.id for m in merged.memories}
+
+        for memory in other.memories:
+            if memory.id not in ids:
+                merged.memories.append(memory)
+                ids.add(memory.id)
+
+        return merged
+
+
