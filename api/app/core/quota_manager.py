@@ -6,7 +6,6 @@
 2. 降级到 default_free_plan.py 配置文件（社区版兜底）
 """
 import asyncio
-import time
 from functools import wraps
 from typing import Optional, Callable, Dict, Any
 from uuid import UUID
@@ -68,7 +67,9 @@ def _get_tenant_id_from_kwargs(db: Session, kwargs: dict):
         if share_record:
             app = db.query(App).filter(App.id == share_record.app_id, App.is_active.is_(True)).first()
             if app:
-                return app.workspace.tenant_id
+                workspace = db.query(Workspace).filter(Workspace.id == app.workspace_id).first()
+                if workspace:
+                    return workspace.tenant_id
 
     return None
 
@@ -597,7 +598,6 @@ async def get_quota_usage(db: Session, tenant_id: UUID) -> dict:
         from app.aioRedis import aio_redis as _aio_redis
         from app.models.api_key_model import ApiKey
         from app.models.workspace_model import Workspace
-        _now = time.time()
         # api_ops_rate_limit 限的是每个 api_key 每秒最高限额
         # 展示当前最接近触发限流的 key 的 QPS（取最大值）
         api_key_ids = db.query(ApiKey.id).join(
@@ -608,7 +608,8 @@ async def get_quota_usage(db: Session, tenant_id: UUID) -> dict:
         ).all()
         for (key_id,) in api_key_ids:
             _rk = API_KEY_QPS_REDIS_KEY.format(api_key_id=key_id)
-            count = int(await _aio_redis.zcount(_rk, _now - 1, "+inf") or 0)
+            val = await _aio_redis.get(_rk)
+            count = int(val) if val else 0
             if count > api_ops_current:
                 api_ops_current = count
     except Exception as e:
