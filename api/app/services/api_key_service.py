@@ -388,7 +388,7 @@ class RateLimiterService:
         if not qps_ok:
             # 判断是套餐限额触发还是 api_key 自身限额触发
             if tenant_limit and effective_limit == tenant_limit and api_key.rate_limit > tenant_limit:
-                error_msg = "Tenant QPS limit exceeded"
+                error_msg = "Tenant limit exceeded"
             else:
                 error_msg = "QPS limit exceeded"
             return False, error_msg, {
