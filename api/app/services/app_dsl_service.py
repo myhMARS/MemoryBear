@@ -601,6 +601,35 @@ class AppDslService:
                     else:
                         warnings.append(f"[{node_label}] 知识库 '{kb_id}' 未匹配，已移除，请导入后手动配置")
                 config["knowledge_bases"] = resolved_kbs
+            elif node_type in (NodeType.LLM.value, NodeType.QUESTION_CLASSIFIER.value, NodeType.PARAMETER_EXTRACTOR.value):
+                model_ref = config.get("model_id")
+                if model_ref:
+                    ref_dict = None
+                    if isinstance(model_ref, dict):
+                        ref_id = model_ref.get("id")
+                        ref_name = model_ref.get("name")
+                        if ref_id:
+                            ref_dict = {"id": ref_id}
+                        elif ref_name and ref_name != "None":
+                            ref_dict = {"name": ref_name, "provider": model_ref.get("provider"), "type": model_ref.get("type")}
+                    elif isinstance(model_ref, str) and model_ref != "None" and len(model_ref) >= 36:
+                        try:
+                            uuid.UUID(model_ref)
+                            ref_dict = {"id": model_ref}
+                        except ValueError:
+                            ref_dict = {"name": model_ref}
+                    elif isinstance(model_ref, str) and model_ref != "None":
+                        ref_dict = {"name": model_ref}
+                    if ref_dict:
+                        resolved_model_id = self._resolve_model(ref_dict, tenant_id, warnings)
+                        if resolved_model_id:
+                            config["model_id"] = resolved_model_id
+                        else:
+                            warnings.append(f"[{node_label}] 模型未匹配，已置空，请导入后手动配置")
+                            config["model_id"] = None
+                    else:
+                        warnings.append(f"[{node_label}] 模型未匹配，已置空，请导入后手动配置")
+                        config["model_id"] = None
             resolved_nodes.append({**node, "config": config})
         return resolved_nodes
 
