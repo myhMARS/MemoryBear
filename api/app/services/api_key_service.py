@@ -386,7 +386,12 @@ class RateLimiterService:
         # 用最终有效限额做 QPS 检查
         qps_ok, qps_info = await self.check_qps(api_key.id, effective_limit)
         if not qps_ok:
-            return False, "QPS limit exceeded", {
+            # 判断是套餐限额触发还是 api_key 自身限额触发
+            if tenant_limit and effective_limit == tenant_limit and api_key.rate_limit > tenant_limit:
+                error_msg = "Tenant QPS limit exceeded"
+            else:
+                error_msg = "QPS limit exceeded"
+            return False, error_msg, {
                 "X-RateLimit-Limit-QPS": str(qps_info["limit"]),
                 "X-RateLimit-Remaining-QPS": str(qps_info["remaining"]),
                 "X-RateLimit-Reset": str(qps_info["reset"])

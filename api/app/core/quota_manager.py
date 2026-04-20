@@ -488,7 +488,7 @@ def check_model_activation_quota(func: Callable) -> Callable:
             logger.warning("模型激活配额检查失败：缺少 model_id 或 model_data 参数")
             return await func(*args, **kwargs)
 
-        if model_data.is_active is True:
+        if model_data.is_active:
             try:
                 from app.services.model_service import ModelConfigService
 
@@ -522,7 +522,7 @@ def check_model_activation_quota(func: Callable) -> Callable:
             logger.warning("模型激活配额检查失败：缺少 model_id 或 model_data 参数")
             return func(*args, **kwargs)
 
-        if model_data.is_active is True:
+        if model_data.is_active:
             try:
                 from app.services.model_service import ModelConfigService
 
