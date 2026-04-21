@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 15:39:59 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-21 14:15:33
+ * @Last Modified time: 2026-04-21 20:27:33
  */
 import { type FC, useEffect, useState, useMemo } from "react";
 import clsx from 'clsx'
@@ -121,6 +121,7 @@ const Properties: FC<PropertiesProps> = ({
 
   useEffect(() => {
     if (values && selectedNode) {
+      const nodeData = selectedNode.getData()
       const { id, knowledge_retrieval, group, group_variables, ...rest } = values
       const { knowledge_bases = [], name: _name, description: _description, ...restKnowledgeConfig } = (knowledge_retrieval as any) || {}
 
@@ -133,9 +134,10 @@ const Properties: FC<PropertiesProps> = ({
           id: vo.id,
           ...vo.config
         }))
+      } else if (nodeData.type === 'knowledge-retrieval') {
+        allRest.knowledge_bases = []
       }
 
-      const nodeData = selectedNode.getData()
 
       Object.keys(values).forEach(key => {
         if (nodeData?.config?.[key]) {
@@ -153,9 +155,7 @@ const Properties: FC<PropertiesProps> = ({
       selectedNode?.setData({
         ...nodeData,
         ...allRest,
-      },
-      // { deep: false }
-      )
+      }, { deep: false })
     }
   }, [values, selectedNode, form])
 
