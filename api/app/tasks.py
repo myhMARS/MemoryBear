@@ -251,8 +251,18 @@ def parse_document(file_path: str, document_id: uuid.UUID):
         # Prepare vision_model for parsing
         vision_model = _build_vision_model(file_path, db_knowledge)
 
+        # 先将文件读入内存，避免解析过程中依赖 NFS 文件持续可访问
+        # python-docx 等库在 binary=None 时会用路径直接打开文件，
+        # 在 NFS/共享存储上可能因缓存失效导致 "Package not found"
+        try:
+            with open(file_path, "rb") as f:
+                file_binary = f.read()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File not found at '{file_path}'")
+
         from app.core.rag.app.naive import chunk
         res = chunk(filename=file_path,
+                    binary=file_binary,
                     from_page=0,
                     to_page=DEFAULT_PARSE_TO_PAGE,
                     callback=progress_callback,
