@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-06 21:10:56 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-15 15:57:35
+ * @Last Modified time: 2026-04-21 14:59:13
  */
 /**
  * Workflow Chat Component
@@ -51,6 +51,7 @@ const Chat = forwardRef<ChatRef, { appId: string; graphRef: GraphRef; data: Work
   const { setChatHistory } = useWorkflowStore()
   const conversationIdRef = useRef<string>('draft')
   const toolbarRef = useRef<ChatToolbarRef>(null)
+  const abortRef = useRef<(() => void) | null>(null)
   const [toolbarReady, setToolbarReady] = useState(false)
   const toolbarCallbackRef = useCallback((node: ChatToolbarRef | null) => {
     (toolbarRef as React.MutableRefObject<ChatToolbarRef | null>).current = node
@@ -64,6 +65,8 @@ const Chat = forwardRef<ChatRef, { appId: string; graphRef: GraphRef; data: Work
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [fileList, setFileList] = useState<any[]>([])
   const [message, setMessage] = useState<string | undefined>(undefined)
+
+  console.log('abortRef', abortRef)
 
   /**
    * Opens the chat drawer and loads workflow variables from the start node
@@ -116,6 +119,8 @@ const Chat = forwardRef<ChatRef, { appId: string; graphRef: GraphRef; data: Work
    * Closes the drawer and resets all state
    */
   const handleClose = () => {
+    abortRef.current?.()
+    abortRef.current = null;
     setOpen(false)
     setToolbarReady(false)
     setChatList([])
@@ -395,7 +400,7 @@ const Chat = forwardRef<ChatRef, { appId: string; graphRef: GraphRef; data: Work
     ])
     setLoading(true)
     setStreamLoading(true)
-    draftRun(appId, data, handleStreamMessage)
+    draftRun(appId, data, handleStreamMessage, abort => { abortRef.current = abort })
       .catch((error) => {
         const errorInfo = JSON.parse(error.message)
         setChatList(prev => {
