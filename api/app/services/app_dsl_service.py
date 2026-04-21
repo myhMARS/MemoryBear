@@ -587,14 +587,12 @@ class AppDslService:
                     if not kb_id:
                         continue
                     kb_ref = {}
-                    if isinstance(kb_id, str) and len(kb_id) >= 36:
+                    if isinstance(kb_id, str) and kb_id != "None":
                         try:
                             uuid.UUID(kb_id)
                             kb_ref["id"] = kb_id
                         except ValueError:
                             kb_ref["name"] = kb_id
-                    else:
-                        kb_ref["name"] = kb_id
                     resolved_id = self._resolve_kb(kb_ref, workspace_id, [])
                     if resolved_id:
                         resolved_kbs.append({**kb, "kb_id": resolved_id})
@@ -612,14 +610,12 @@ class AppDslService:
                             ref_dict = {"id": ref_id}
                         elif ref_name and ref_name != "None":
                             ref_dict = {"name": ref_name, "provider": model_ref.get("provider"), "type": model_ref.get("type")}
-                    elif isinstance(model_ref, str) and model_ref != "None" and len(model_ref) >= 36:
+                    elif isinstance(model_ref, str) and model_ref != "None":
                         try:
                             uuid.UUID(model_ref)
                             ref_dict = {"id": model_ref}
                         except ValueError:
                             ref_dict = {"name": model_ref}
-                    elif isinstance(model_ref, str) and model_ref != "None":
-                        ref_dict = {"name": model_ref}
                     if ref_dict:
                         resolved_model_id = self._resolve_model(ref_dict, tenant_id, warnings)
                         if resolved_model_id:
