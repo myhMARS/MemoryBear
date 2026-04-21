@@ -76,51 +76,21 @@ def create_knowledge(
 
         tenant_id = workspace.tenant_id
 
-        def _get_model_by_id_or_fallback(model_id: str | None, model_types: list, label: str):
-            """优先按 workspace 绑定的 model_config id 查，找不到再 fallback 到 tenant 下最新创建的一个"""
-            if model_id:
-                model = db.query(ModelConfig).filter(
-                    ModelConfig.id == model_id,
-                    ModelConfig.tenant_id == tenant_id,
-                    ModelConfig.is_active == True,
-                    ModelConfig.is_composite == False
-                ).first()
-                if model:
-                    business_logger.debug(f"Auto-bind {label} model from workspace default: {model.id}")
-                    return model
-                business_logger.debug(f"Workspace default {label} model id '{model_id}' not found, falling back to tenant latest")
-            model = db.query(ModelConfig).filter(
-                ModelConfig.tenant_id == tenant_id,
-                ModelConfig.type.in_([t.value for t in model_types]),
-                ModelConfig.is_active == True,
-                ModelConfig.is_composite == False
-            ).order_by(ModelConfig.created_at.desc()).first()
-            if model:
-                business_logger.debug(f"Auto-bind {label} model from tenant fallback (latest): {model.id}")
-            return model
-
         if not knowledge.embedding_id:
-            model = _get_model_by_id_or_fallback(workspace.embedding, [ModelType.EMBEDDING], "embedding")
-            if model:
-                knowledge.embedding_id = model.id
+            knowledge.embedding_id = workspace.embedding
 
         if not knowledge.reranker_id:
-            model = _get_model_by_id_or_fallback(workspace.rerank, [ModelType.RERANK], "rerank")
-            if model:
-                knowledge.reranker_id = model.id
+            knowledge.reranker_id = workspace.rerank
 
         if not knowledge.llm_id:
-            model = _get_model_by_id_or_fallback(workspace.llm, [ModelType.LLM, ModelType.CHAT], "llm")
-            if model:
-                knowledge.llm_id = model.id
+            knowledge.llm_id = workspace.llm
 
         if not knowledge.image2text_id:
             model = db.query(ModelConfig).filter(
                 ModelConfig.tenant_id == tenant_id,
-                ModelConfig.type.in_([ModelType.CHAT.value]),
+                ModelConfig.type.in_([ModelType.CHAT.value, ModelType.LLM.value]),
                 ModelConfig.capability.contains(["vision"]),
                 ModelConfig.is_active == True,
-                ModelConfig.is_composite == False
             ).order_by(ModelConfig.created_at.desc()).first()
             if not model:
                 raise Exception("租户下没有可用的视觉模型，创建知识库失败")
