@@ -77,12 +77,18 @@ def create_knowledge(
         tenant_id = workspace.tenant_id
 
         if not knowledge.embedding_id:
+            if not workspace.embedding:
+                raise Exception("工作空间未配置 Embedding 模型，请先完善工作空间配置后重试")
             knowledge.embedding_id = workspace.embedding
 
         if not knowledge.reranker_id:
+            if not workspace.rerank:
+                raise Exception("工作空间未配置 Rerank 模型，请先完善工作空间配置后重试")
             knowledge.reranker_id = workspace.rerank
 
         if not knowledge.llm_id:
+            if not workspace.llm:
+                raise Exception("工作空间未配置 LLM 模型，请先完善工作空间配置后重试")
             knowledge.llm_id = workspace.llm
 
         if not knowledge.image2text_id:
