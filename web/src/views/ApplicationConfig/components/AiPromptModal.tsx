@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 16:26:44 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-21 14:50:21
+ * @Last Modified time: 2026-04-21 16:29:40
  */
 /**
  * AI Prompt Assistant Modal
@@ -295,8 +295,12 @@ const AiPromptModal = forwardRef<AiPromptModalRef, AiPromptModalProps>(({
               {values?.current_prompt
                 ? <Editor 
                   ref={editorRef}
-                  className="rb:h-[calc(100vh-278px)] rb:bg-white! rb:border-none! rb:p-0!" 
-                  onChange={(value) => form.setFieldValue('current_prompt', value)}
+                  className="rb:h-[calc(100vh-278px)] rb:bg-white! rb:border-none! rb:p-0!"
+                  disabled={loading}
+                  onChange={(value) => {
+                    if (loading) return
+                    form.setFieldValue('current_prompt', value)
+                  }}
                 />
                 : <Empty url={analysisEmptyIcon} title={t(`${source}.promptOptimizationEmpty`)} isNeedSubTitle={false} size={[270, 170]} className="rb:h-[calc(100vh-278px)] rb:w-70 rb:mx-auto! rb:text-center! rb:text-[12px]! rb:leading-4!" />
               }
