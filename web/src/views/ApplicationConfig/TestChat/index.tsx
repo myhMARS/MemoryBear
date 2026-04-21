@@ -92,6 +92,7 @@ const TestChat: FC<TestChatProps> = ({
   const audioPollingRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
   const streamLoadingRef = useRef(false)
   const [audioStatusMap, setAudioStatusMap] = useState<Record<string, string>>({})
+  const abortRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     getVariables()
@@ -99,6 +100,8 @@ const TestChat: FC<TestChatProps> = ({
 
   useEffect(() => {
     return () => {
+      abortRef.current?.()
+      abortRef.current = null
       audioPollingRef.current.forEach(timer => clearInterval(timer))
       audioPollingRef.current.clear()
     }
@@ -262,7 +265,8 @@ const TestChat: FC<TestChatProps> = ({
     draftRun(
       application.id,
       formatParams((msg || message) as string, conversationId, files, params),
-      handleStreamMessage
+      handleStreamMessage,
+      (abort) => { abortRef.current = abort }
     )
       .catch(() => {
         updateErrorAssistantMessage(0)
@@ -373,7 +377,8 @@ const TestChat: FC<TestChatProps> = ({
     draftRun(
       application.id,
       formatParams((msg || message) as string, conversationId, files, params),
-      handleWorkflowStreamMessage
+      handleWorkflowStreamMessage,
+      (abort) => { abortRef.current = abort }
     )
       .catch((error) => {
         const errorInfo = JSON.parse(error.message)

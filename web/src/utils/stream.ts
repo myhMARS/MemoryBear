@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-02 16:35:43 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-03-18 14:32:40
+ * @Last Modified time: 2026-04-21 14:20:39
  */
 /**
  * Server-Sent Events (SSE) Stream Utility Module
@@ -148,7 +148,7 @@ function parseDataContent(dataContent: string): string | object {
  * @param config - Additional request configuration
  * @returns Fetch response
  */
-const makeSSERequest = async (url: string, data: any, token: string, config = { headers: {} }) => {
+const makeSSERequest = async (url: string, data: any, token: string, config = { headers: {} }, signal?: AbortSignal) => {
   return fetch(`${API_PREFIX}${url}`, {
     method: 'POST',
     headers: {
@@ -156,7 +156,8 @@ const makeSSERequest = async (url: string, data: any, token: string, config = { 
       'Authorization': `Bearer ${token}`,
       ...config.headers,
     },
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
+    signal,
   });
 };
 
@@ -167,10 +168,14 @@ const makeSSERequest = async (url: string, data: any, token: string, config = { 
  * @param onMessage - Callback for each parsed message
  * @param config - Additional request configuration
  */
-export const handleSSE = async (url: string, data: any, onMessage?: (data: SSEMessage[]) => void, config = { headers: {} }) => {
+export const handleSSE = async (url: string, data: any, onMessage?: (data: SSEMessage[]) => void, config = { headers: {} }, onAbort?: (abort: () => void) => void) => {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  onAbort?.(abort);
+
   try {
     let token = cookieUtils.get('authToken');
-    let response = await makeSSERequest(url, data, token || '', config);
+    let response = await makeSSERequest(url, data, token || '', config, controller.signal);
 
     switch (response.status) {
       case 500:
@@ -199,7 +204,7 @@ export const handleSSE = async (url: string, data: any, onMessage?: (data: SSEMe
         }
         try {
           const newToken = await refreshTokenForSSE();
-          response = await makeSSERequest(url, data, newToken, config);
+          response = await makeSSERequest(url, data, newToken, config, controller.signal);
         } catch (refreshError) {
           return;
         }
@@ -211,30 +216,37 @@ export const handleSSE = async (url: string, data: any, onMessage?: (data: SSEMe
     const decoder = new TextDecoder();
     let buffer = ''; // Buffer for handling incomplete messages
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done || controller.signal.aborted) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      buffer += chunk;
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
 
-      // Process complete events
-      const events = buffer.split('\n\n');
-      buffer = events.pop() || ''; // Keep last potentially incomplete event
+        // Process complete events
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || ''; // Keep last potentially incomplete event
 
-      for (const event of events) {
-        if (event.trim() && onMessage) {
-          onMessage(parseSSEToJSON(event) ?? {});
+        for (const event of events) {
+          if (event.trim() && onMessage) {
+            onMessage(parseSSEToJSON(event) ?? {});
+          }
         }
       }
-    }
 
-    // Process remaining buffer content
-    if (buffer.trim() && onMessage) {
-      onMessage(parseSSEToJSON(buffer) ?? {});
+      // Process remaining buffer content
+      if (!controller.signal.aborted && buffer.trim() && onMessage) {
+        onMessage(parseSSEToJSON(buffer) ?? {});
+      }
+    } finally {
+      reader.cancel();
     }
-  } catch (error) {
-    console.error('Request failed:', error);
-    throw error;
+  } catch (error: any) {
+    if (error?.name !== 'AbortError') {
+      console.error('Request failed:', error);
+      throw error;
+    }
   }
+
 };

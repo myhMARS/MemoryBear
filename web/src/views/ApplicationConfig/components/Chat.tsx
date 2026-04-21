@@ -73,11 +73,14 @@ const Chat: FC<ChatProps> = ({
   const [message, setMessage] = useState<string | undefined>(undefined)
   const [features, setFeatures] = useState<FeaturesConfigForm>({} as FeaturesConfigForm)
   const [audioStatusMap, setAudioStatusMap] = useState<Record<string, string>>({})
+  const abortRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     setCompareLoading(false)
     setLoading(false)
     return () => {
+      abortRef.current?.()
+      abortRef.current = null
       audioPollingRef.current.forEach(timer => clearInterval(timer))
       audioPollingRef.current.clear()
     }
@@ -85,6 +88,8 @@ const Chat: FC<ChatProps> = ({
 
   useEffect(() => {
     return () => {
+      abortRef.current?.()
+      abortRef.current = null
       audioPollingRef.current.forEach(timer => clearInterval(timer))
       audioPollingRef.current.clear()
     }
@@ -393,7 +398,7 @@ const Chat: FC<ChatProps> = ({
             parallel: true,
             stream: true,
             timeout: 60,
-          }, handleStreamMessage)
+          }, handleStreamMessage, (abort) => { abortRef.current = abort })
             .catch(() => {
               setLoading(false)
               setCompareLoading(false)
@@ -537,7 +542,8 @@ const Chat: FC<ChatProps> = ({
                 }
               }),
             },
-            handleStreamMessage
+            handleStreamMessage,
+            (abort) => { abortRef.current = abort }
           )
             .catch(() => {
               setLoading(false)
