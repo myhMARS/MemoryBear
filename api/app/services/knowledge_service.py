@@ -122,9 +122,10 @@ def create_knowledge(
                 ModelConfig.is_active == True,
                 ModelConfig.is_composite == False
             ).order_by(ModelConfig.created_at.desc()).first()
-            if model:
-                knowledge.image2text_id = model.id
-                business_logger.debug(f"Auto-bind image2text model: {model.id}")
+            if not model:
+                raise Exception("租户下没有可用的视觉模型，创建知识库失败")
+            knowledge.image2text_id = model.id
+            business_logger.debug(f"Auto-bind image2text model: {model.id}")
 
         business_logger.debug(f"Start creating the knowledge base: {knowledge.name}")
         db_knowledge = knowledge_repository.create_knowledge(
