@@ -369,6 +369,15 @@ class ModelConfigService:
                 raise BusinessException("模型名称已存在", BizCode.DUPLICATE_NAME)
 
         model = ModelConfigRepository.update(db, model_id, model_data, tenant_id=tenant_id)
+
+        # 同步更新关联 api_keys 的 capability 和 is_omni
+        if model_data.capability is not None or model_data.is_omni is not None:
+            for api_key in model.api_keys:
+                if model_data.capability is not None:
+                    api_key.capability = model_data.capability
+                if model_data.is_omni is not None:
+                    api_key.is_omni = model_data.is_omni
+
         db.commit()
         db.refresh(model)
         return model
