@@ -1,5 +1,5 @@
 import { useRef, useState, useLayoutEffect, useCallback, type ReactNode } from 'react'
-import { Popover } from 'antd'
+import { Popover, type PopoverProps } from 'antd'
 import Tag, { type TagProps } from '@/components/Tag'
 
 interface OverflowTagsProps {
@@ -7,9 +7,10 @@ interface OverflowTagsProps {
   gap?: number;
   numTagColor?: TagProps['color'];
   numTag?: (num?: number) => ReactNode;
+  popoverProps?: PopoverProps | false;
 }
 
-const OverflowTags = ({ items, gap = 8, numTagColor = 'default', numTag }: OverflowTagsProps) => {
+const OverflowTags = ({ items, gap = 8, numTagColor = 'default', numTag, popoverProps }: OverflowTagsProps) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLDivElement>(null)
   const [visibleCount, setVisibleCount] = useState(items.length)
@@ -66,11 +67,15 @@ const OverflowTags = ({ items, gap = 8, numTagColor = 'default', numTag }: Overf
         {items.map((item, i) => <span key={i}>{item}</span>)}
         <Tag>+0</Tag>
       </div>
-      <Popover content={
-        <div style={{ display: 'flex', gap, flexWrap: 'wrap', maxWidth: 300 }}>
-          {items.map((item, i) => <span key={i}>{item}</span>)}
-        </div>
-      }>
+      <Popover
+        content={
+          <div style={{ display: 'flex', gap, flexWrap: 'wrap', maxWidth: 300 }}>
+            {items.map((item, i) => <span key={i}>{item}</span>)}
+          </div>
+        }
+        {...(popoverProps || {})}
+        open={popoverProps === false ? false : undefined}
+      >
         <div style={{ display: 'flex', gap, alignItems: 'center', flexWrap: 'nowrap' }}>
           {items.slice(0, visibleCount).map((item, i) => <span key={i}>{item}</span>)}
           {hidden > 0 && numTag
