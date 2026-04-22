@@ -18,6 +18,7 @@ import {
   getSemanticsMemory,
   getEpisodicMemory,
   type EpisodicMemoryQuery,
+  type EpisodicMemoryType,
 } from '@/api/memory'
 import { formatDateTime } from '@/utils/format'
 import Empty from '@/components/Empty'
@@ -25,7 +26,6 @@ import ExplicitDetailModal from '../components/ExplicitDetailModal'
 
 /** An episodic (event-based) memory entry with a title and free-text content. */
 
-export type EpisodicMemoryType = "conversation" | "project_work" | "learning" | "decision" | "important_event"
 export interface EpisodicMemory {
   id: string;
   title: string;
@@ -116,7 +116,7 @@ const ExplicitDetail: FC = () => {
 
     if (range && range.length === 2) {
       params.start_date = range[0]!.startOf('day').valueOf()
-      params.end_date = range[0]!.endOf('day').valueOf()
+      params.end_date = range[1]!.endOf('day').valueOf()
     }
     setEpisodicLoading(true)
     getEpisodicMemory(params)
