@@ -17,6 +17,7 @@
 
 import { type FC, type ReactNode, useEffect, useState } from 'react';
 import { Slider, type SliderSingleProps, Flex, InputNumber, type InputNumberProps } from 'antd';
+import { useTranslation } from 'react-i18next';
 
 /** Props interface for RbSlider component */
 interface RbSliderProps extends SliderSingleProps {
@@ -41,12 +42,13 @@ const RbSlider: FC<RbSliderProps> = ({
   step = 0.01,
   size = 'default' ,
   isInput = false,
-  className = '',
+  className = 'rb:pl-1!',
   prefix,
   inputClassName,
   disabled,
   ...rest
 }) => {
+  const { t } = useTranslation()
   const [curValue, setCurValue] = useState<SliderSingleProps['value']>(0)
   useEffect(() => {
     setCurValue(value)
@@ -102,6 +104,7 @@ const RbSlider: FC<RbSliderProps> = ({
           onChange={handleInputChange}
           prefix={prefix}
           className={`${inputClassName || '' } rb:w-20!`}
+          placeholder={t('common.pleaseEnter')}
         />
         : <div className="rb:text-[14px] rb:text-[#155EEF] rb:leading-5">{curValue || min}</div>
       }
