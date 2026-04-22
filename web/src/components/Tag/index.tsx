@@ -1,8 +1,8 @@
 /*
  * @Author: ZhaoYing 
  * @Date: 2026-02-02 15:29:57 
- * @Last Modified by:   ZhaoYing 
- * @Last Modified time: 2026-02-02 15:29:57 
+ * @Last Modified by: ZhaoYing
+ * @Last Modified time: 2026-04-22 13:48:09
  */
 /**
  * Tag Component
@@ -23,6 +23,7 @@ export interface TagProps {
   children: ReactNode;
   /** Additional CSS classes */
   className?: string;
+  variant?: 'outline' | 'borderless'
 }
 
 /** Color theme mappings with text, border, and background colors */
@@ -37,9 +38,9 @@ const colors = {
 }
 
 /** Custom tag component with color themes */
-const Tag: FC<TagProps> = ({ color = 'processing', children, className }) => {
+const Tag: FC<TagProps> = ({ color = 'processing', children, className, variant = 'outline' }) => {
   return (
-    <span className={`rb:inline-block rb:px-1 rb:py-0.5 rb:rounded-sm rb:text-[12px] rb:font-regular! rb:leading-4 rb:border ${colors[color]} ${className || ''}`}>
+    <span className={`rb:inline-block rb:px-1 rb:py-0.5 rb:rounded-sm rb:text-[12px] rb:font-regular! rb:leading-4 rb:border ${colors[color]} ${className || ''} ${variant === 'borderless' ? 'rb:border-none!' : ''}`}>
       {children}
     </span>
   )
