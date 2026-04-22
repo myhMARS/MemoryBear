@@ -32,26 +32,13 @@ def _get_user_from_kwargs(kwargs: dict):
 
 def _get_workspace_id_from_kwargs(kwargs: dict):
     """从 kwargs 中获取 workspace_id"""
+    # 优先从 kwargs['workspace_id'] 获取
     workspace_id = kwargs.get("workspace_id")
     if workspace_id:
         logger.info(f"_get_workspace_id_from_kwargs: 从 kwargs['workspace_id'] 获取: {workspace_id}")
         return workspace_id
 
-    data = kwargs.get("data") or kwargs.get("body") or kwargs.get("payload")
-    if data and hasattr(data, "workspace_id"):
-        ws_id = data.workspace_id
-        if ws_id:
-            logger.info(f"_get_workspace_id_from_kwargs: 从 payload 获取: {ws_id}")
-            return ws_id
-        logger.info(f"_get_workspace_id_from_kwargs: payload.workspace_id 为 None，继续尝试其他方式")
-
-    api_key_auth = kwargs.get("api_key_auth")
-    if api_key_auth and hasattr(api_key_auth, 'workspace_id'):
-        ws_id = api_key_auth.workspace_id
-        logger.info(f"_get_workspace_id_from_kwargs: 从 api_key_auth 获取: {ws_id}")
-        return ws_id
-
-    # 从 current_user.current_workspace_id 获取（cur_workspace_access_guard 模式）
+    # 从 current_user.current_workspace_id 获取（管理端接口）
     user = _get_user_from_kwargs(kwargs)
     logger.info(f"_get_workspace_id_from_kwargs: user={user}, type={type(user)}")
     if user:
@@ -59,26 +46,21 @@ def _get_workspace_id_from_kwargs(kwargs: dict):
         logger.info(f"_get_workspace_id_from_kwargs: user.current_workspace_id={ws_id}")
         if ws_id:
             return ws_id
-        
-        # 如果 current_workspace_id 为空，尝试获取用户的第一个工作空间
-        if hasattr(user, 'id'):
-            try:
-                from app.models.workspace_model import WorkspaceMember
-                db_session = kwargs.get("db")
-                logger.info(f"_get_workspace_id_from_kwargs: db_session={db_session is not None}, user.id={user.id}")
-                if db_session:
-                    first_workspace = (
-                        db_session.query(WorkspaceMember.workspace_id)
-                        .filter(WorkspaceMember.user_id == user.id)
-                        .filter(WorkspaceMember.is_active.is_(True))
-                        .first()
-                    )
-                    logger.info(f"_get_workspace_id_from_kwargs: first_workspace={first_workspace}")
-                    if first_workspace:
-                        logger.info(f"用户 {user.username} 的 current_workspace_id 为空，使用第一个工作空间: {first_workspace.workspace_id}")
-                        return first_workspace.workspace_id
-            except Exception as e:
-                logger.error(f"获取用户第一个工作空间失败: {e}", exc_info=True)
+
+    # 从 payload/data/body 获取（仅当上述方式都失败时）
+    data = kwargs.get("data") or kwargs.get("body") or kwargs.get("payload")
+    if data and hasattr(data, "workspace_id"):
+        ws_id = data.workspace_id
+        if ws_id:
+            logger.info(f"_get_workspace_id_from_kwargs: 从 payload 获取: {ws_id}")
+            return ws_id
+
+    # 从 api_key_auth 获取（API Key 认证方式）
+    api_key_auth = kwargs.get("api_key_auth")
+    if api_key_auth and hasattr(api_key_auth, 'workspace_id'):
+        ws_id = api_key_auth.workspace_id
+        logger.info(f"_get_workspace_id_from_kwargs: 从 api_key_auth 获取: {ws_id}")
+        return ws_id
 
     logger.warning(f"_get_workspace_id_from_kwargs: 无法从 kwargs 获取 workspace_id, keys={list(kwargs.keys())}")
     return None
