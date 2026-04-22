@@ -175,7 +175,7 @@ class MemoryAPIService:
         #     storage_type,
         #     user_rag_memory_id or "",
         # )
-        scheduler.push_task(
+        task_id = scheduler.push_task(
             "app.core.memory.agent.write_message",
             end_user_id,
             {
@@ -190,8 +190,8 @@ class MemoryAPIService:
         logger.info(f"Memory write task submitted, end_user_id={end_user_id}")
 
         return {
-            # "task_id": task.id,
-            "status": "PENDING",
+            "task_id": task_id,
+            "status": "QUEUED",
             "end_user_id": end_user_id,
         }
 

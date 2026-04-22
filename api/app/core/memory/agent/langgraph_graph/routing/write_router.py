@@ -94,9 +94,9 @@ async def write(
         # )
         scheduler.push_task(
             "app.core.memory.agent.write_message",
-            end_user_id,
+            actual_end_user_id,
             {
-                "end_user_id": end_user_id,
+                "end_user_id": actual_end_user_id,
                 "message": structured_messages,
                 "config_id": str(actual_config_id),
                 "storage_type": storage_type,

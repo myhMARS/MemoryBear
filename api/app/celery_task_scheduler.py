@@ -6,7 +6,7 @@ import redis
 
 from app.core.config import settings
 from celery_app import celery_app
-from core.logging_config import get_named_logger
+from app.core.logging_config import get_named_logger
 
 logger = get_named_logger("task_scheduler")
 
@@ -62,10 +62,33 @@ class RedisTaskScheduler:
                     "params": json.dumps(params),
                 }
             )
+            self.redis.set(
+                f"task_tracker:{msg_id}",
+                json.dumps({"status": "QUEUED", "task_id": None}),
+                ex=86400
+            )
             return msg_id
         except Exception as e:
             logger.error("Push task exception %s", e, exc_info=True)
             raise e
+
+    def get_task_status(self, msg_id: str) -> dict:
+        raw = self.redis.get(f"task_tracker:{msg_id}")
+        if raw is None:
+            return {"status": "NOT_FOUND"}
+
+        tracker = json.loads(raw)
+        status = tracker["status"]
+        task_id = tracker.get("task_id")
+        result_content = tracker.get("result") or {}
+        if status == "DISPATCHED" and task_id:
+            result_raw = self.redis.get(f"celery-task-meta-{task_id}")
+            if result_raw:
+                result_data = json.loads(result_raw)
+                status = result_data.get("status", status)
+                result_content = result_data.get("result")
+
+        return {"status": status, "task_id": task_id, "result": result_content}
 
     def _cleanup_finished(self):
         pending = self.redis.hgetall(PENDING_HASH)
@@ -91,6 +114,7 @@ class RedisTaskScheduler:
                 age = now - dispatched_at
 
                 should_cleanup = False
+                result_data = None
                 if raw_result is not None:
                     result_data = json.loads(raw_result)
                     if result_data.get("status") in ("SUCCESS", "FAILURE", "REVOKED"):
@@ -104,8 +128,20 @@ class RedisTaskScheduler:
                     )
 
                 if should_cleanup:
+                    final_status = result_data.get("status", "UNKNOWN") if result_data else "EXPIRED"
                     cleanup_pipe.delete(lock_key)
                     cleanup_pipe.hdel(PENDING_HASH, task_id)
+                    tracker_msg_id = meta.get("msg_id")
+                    if tracker_msg_id:
+                        cleanup_pipe.set(
+                            f"task_tracker:{tracker_msg_id}",
+                            json.dumps({
+                                "status": final_status,
+                                "task_id": task_id,
+                                "result": result_data.get("result") or {}
+                            }),
+                            ex=86400,
+                        )
                     has_cleanup = True
             except Exception as e:
                 logger.error("Cleanup error for %s: %s", task_id, e, exc_info=True)
@@ -125,9 +161,15 @@ class RedisTaskScheduler:
             pipe.set(lock_key, task.id, ex=3600)
             pipe.hset(PENDING_HASH, task.id, json.dumps({
                 "lock_key": lock_key,
-                "dispatched_at": time.time()
+                "dispatched_at": time.time(),
+                "msg_id": msg_id
             }))
             pipe.xdel(STREAM_KEY, msg_id)
+            pipe.set(
+                f"task_tracker:{msg_id}",
+                json.dumps({"status": "DISPATCHED", "task_id": task.id}),
+                ex=86400,
+            )
             pipe.execute()
             self.dispatched += 1
             logger.info("Task dispatched: %s", task.id)
@@ -183,8 +225,8 @@ class RedisTaskScheduler:
             if locked or lock_key in deliver_keys:
                 continue
 
-            key = self._dispatch(msg_id, msg_data)
-            if key:
+            dispatched_successfully = self._dispatch(msg_id, msg_data)
+            if dispatched_successfully:
                 deliver_keys.add(lock_key)
         time.sleep(0.1)
 
