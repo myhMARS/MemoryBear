@@ -161,11 +161,11 @@ const Knowledge: FC<KnowledgeProps> = ({ value = { knowledge_bases: [] }, onChan
         extra={
           <Space>
             <Button
-              className="rb:h-6! rb:py-0! rb:px-2! rb:rounded-md! rb:text-[#21233"
+              className="rb:h-6! rb:py-0! rb:px-2! rb:rounded-md! rb:text-[#212332]"
               icon={<div className="rb:size-4 rb:bg-cover rb:bg-[url('@/assets/images/application/set.svg')]"></div>}
               onClick={handleKnowledgeConfig}
             >{t('application.globalConfig')}</Button>
-            <Button className="rb:h-6! rb:py-0! rb:px-2! rb:rounded-md! rb:text-[#21233" onClick={handleAddKnowledge}>+</Button>
+            <Button className="rb:h-6! rb:py-0! rb:px-2! rb:rounded-md! rb:text-[#212332]" onClick={handleAddKnowledge}>+</Button>
           </Space>
         }
         headerType="borderless"
