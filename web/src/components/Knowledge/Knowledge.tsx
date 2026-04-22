@@ -89,12 +89,15 @@ const Knowledge: FC<KnowledgeProps> = ({ value = { knowledge_bases: [] }, onChan
       onChange?.({ ...editConfig, knowledge_bases: [...list] })
     } else if (type === 'rerankerConfig') {
       const rerankerValues = values as RerankerConfig
-      setEditConfig(prev => ({ ...prev, ...rerankerValues }))
-      onChange?.({
-        ...editConfig,
-        ...rerankerValues,
-        reranker_id: rerankerValues.rerank_model ? rerankerValues.reranker_id : undefined,
-        reranker_top_k: rerankerValues.rerank_model ? rerankerValues.reranker_top_k : undefined,
+      setEditConfig(prev => {
+        const next = {
+          ...prev,
+          ...rerankerValues,
+          reranker_id: rerankerValues.rerank_model ? rerankerValues.reranker_id : undefined,
+          reranker_top_k: rerankerValues.rerank_model ? rerankerValues.reranker_top_k : undefined,
+        }
+        onChange?.(next)
+        return next
       })
     }
   }

@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 15:52:50 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-22 11:34:06
+ * @Last Modified time: 2026-04-22 12:07:40
  */
 import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -95,44 +95,39 @@ const ApiKeyManagement: React.FC = () => {
         renderItem={(apiKeyItem) => {
           return (
             <RbCard
-              title={ 
-                <Flex justify="space-between" className="rb:w-full!">
-                  <Flex gap={4} vertical className="rb:flex-1!">
-                    {apiKeyItem.name}
-                    <Flex gap={6}>
-                      {apiKeyItem.scopes?.includes('memory') && <Tag>{t('apiKey.memoryEngine')}</Tag>}
-                      {apiKeyItem.scopes?.includes('rag') && <Tag color="success">{t('apiKey.knowledgeBase')}</Tag>}
-                      {!apiKeyItem.scopes?.includes('memory') && !apiKeyItem.scopes?.includes('rag') && <div className="rb:font-regular!">{t('apiKey.noScopes')}</div>}
-                    </Flex>
-                  </Flex>
-                  <MoreDropdown
-                    items={[
-                      {
-                        key: 'edit',
-                        icon: <div className="rb:size-4 rb:bg-cover rb:cursor-pointer rb:bg-[url('@/assets/images/common/edit_bold.svg')]" />,
-                        label: t('common.edit'),
-                        onClick: () => handleEdit(apiKeyItem),
-                      },
-                      {
-                        key: 'view',
-                        icon: <div className="rb:size-4 rb:bg-cover rb:cursor-pointer rb:bg-[url('@/assets/images/common/eye.svg')]" />,
-                        label: t('common.view'),
-                        onClick: () => handleView(apiKeyItem),
-                      },
-                      {
-                        key: 'delete',
-                        danger: true,
-                        icon: <div className="rb:size-4 rb:bg-cover rb:cursor-pointer rb:bg-[url('@/assets/images/common/delete_red_big.svg')]" />,
-                        label: t('common.delete'),
-                        onClick: () => handleDelete(apiKeyItem),
-                      },
-                    ]}
-                  />
-                </Flex>
-              }
-              isNeedTooltip={false}
-              headerClassName="rb:min-h-[78px]!"
+              title={apiKeyItem.name}
+              extra={<MoreDropdown
+                items={[
+                  {
+                    key: 'edit',
+                    icon: <div className="rb:size-4 rb:bg-cover rb:cursor-pointer rb:bg-[url('@/assets/images/common/edit_bold.svg')]" />,
+                    label: t('common.edit'),
+                    onClick: () => handleEdit(apiKeyItem),
+                  },
+                  {
+                    key: 'view',
+                    icon: <div className="rb:size-4 rb:bg-cover rb:cursor-pointer rb:bg-[url('@/assets/images/common/eye.svg')]" />,
+                    label: t('common.view'),
+                    onClick: () => handleView(apiKeyItem),
+                  },
+                  {
+                    key: 'delete',
+                    danger: true,
+                    icon: <div className="rb:size-4 rb:bg-cover rb:cursor-pointer rb:bg-[url('@/assets/images/common/delete_red_big.svg')]" />,
+                    label: t('common.delete'),
+                    onClick: () => handleDelete(apiKeyItem),
+                  },
+                ]}
+              />}
+              variant="borderless"
+              headerClassName="rb:min-h-[42px]!"
+              titleClassName="rb:line-clamp-1!"
             >
+              <Flex gap={6} className="rb:-mt-2! rb:mb-4!">
+                {apiKeyItem.scopes?.includes('memory') && <Tag>{t('apiKey.memoryEngine')}</Tag>}
+                {apiKeyItem.scopes?.includes('rag') && <Tag color="success">{t('apiKey.knowledgeBase')}</Tag>}
+                {!apiKeyItem.scopes?.includes('memory') && !apiKeyItem.scopes?.includes('rag') && <div className="rb:font-regular!">{t('apiKey.noScopes')}</div>}
+              </Flex>
               <RbDescriptions
                 items={['id', 'is_expired', 'created_at'].map(key => ({
                   key,

@@ -1,11 +1,11 @@
-import { type FC } from 'react';
+import { type FC, type MouseEvent } from 'react';
 import { Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
 
 interface MoreDropdownProps {
   items: NonNullable<MenuProps['items']>;
   placement?: 'bottomRight' | 'bottomLeft' | 'topRight' | 'topLeft';
-  onClick?: (e: React.MouseEvent) => void;
+  onClick?: (e: MouseEvent) => void;
 }
 
 /**
