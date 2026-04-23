@@ -12,19 +12,32 @@ WritePipeline — 记忆写入流水线
 
 依赖方向：Facade → Pipeline → Engine → Repository（单向，不允许反向调用）
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
 import uuid
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional
 
+from pydantic import BaseModel, Field, ConfigDict
+
 if TYPE_CHECKING:
-    from app.core.memory.models.graph_models import ExtractedEntityNode
     from app.core.memory.models.message_models import DialogData
     from app.schemas.memory_config_schema import MemoryConfig
+
+from app.core.memory.models.graph_models import (
+    ChunkNode,
+    DialogueNode,
+    EntityEntityEdge,
+    ExtractedEntityNode,
+    PerceptualEdge,
+    PerceptualNode,
+    StatementChunkEdge,
+    StatementEntityEdge,
+    StatementNode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,36 +47,40 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────
 
 
-@dataclass
-class ExtractionResult:
-    """萃取步骤的结构化输出，替代 ExtractionOrchestrator.run() 返回的裸元组。
+class ExtractionResult(BaseModel):
+    """萃取 + 图构建 + 去重消歧后的结构化输出。
 
-    字段与 ExtractionOrchestrator.run() 的 10 元素返回值一一对应：
-      [0] dialogue_nodes      → self.dialogue_nodes
-      [1] chunk_nodes         → self.chunk_nodes
-      [2] statement_nodes     → self.statement_nodes
-      [3] entity_nodes        → self.entity_nodes
-      [4] perceptual_nodes    → self.perceptual_nodes
-      [5] stmt_chunk_edges    → self.stmt_chunk_edges
-      [6] stmt_entity_edges   → self.stmt_entity_edges
-      [7] entity_entity_edges → self.entity_entity_edges
-      [8] perceptual_edges    → self.perceptual_edges
-      [9] dialog_data_list    → self.dialog_data_list
+    作为 Pipeline 层的阶段间数据载体，确保下游步骤（_store、_cluster）
+    接收到的图节点和边结构完整、类型正确。
 
-    注意：字段类型使用 List[Any] 而非具体的 graph_models 类型，
-    避免在模块加载时触发循环依赖。Pipeline 只做数据传递，不检查具体类型。
+    字段对应 ExtractionOrchestrator 产出的图节点/边：
+      dialogue_nodes      — 对话节点
+      chunk_nodes         — 分块节点
+      statement_nodes     — 陈述句节点
+      entity_nodes        — 实体节点（去重消歧后）
+      perceptual_nodes    — 感知节点
+      stmt_chunk_edges    — 陈述句 → 分块 边
+      stmt_entity_edges   — 陈述句 → 实体 边
+      entity_entity_edges — 实体 → 实体 边（去重消歧后）
+      perceptual_edges    — 感知 → 分块 边
+      dialog_data_list    — 原始 DialogData（供摘要阶段使用）
     """
 
-    dialogue_nodes: List[Any]
-    chunk_nodes: List[Any]
-    statement_nodes: List[Any]
-    entity_nodes: List[Any]
-    perceptual_nodes: List[Any]
-    stmt_chunk_edges: List[Any]
-    stmt_entity_edges: List[Any]
-    entity_entity_edges: List[Any]
-    perceptual_edges: List[Any]
-    dialog_data_list: List[Any]
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    dialogue_nodes: List[DialogueNode]
+    chunk_nodes: List[ChunkNode]
+    statement_nodes: List[StatementNode]
+    entity_nodes: List[ExtractedEntityNode]
+    perceptual_nodes: List[PerceptualNode]
+    stmt_chunk_edges: List[StatementChunkEdge]
+    stmt_entity_edges: List[StatementEntityEdge]
+    entity_entity_edges: List[EntityEntityEdge]
+    perceptual_edges: List[PerceptualEdge]
+    dialog_data_list: List[Any] = Field(
+        default_factory=list,
+        description="原始 DialogData 列表，类型为 Any 以避免循环依赖",
+    )
 
     @property
     def stats(self) -> Dict[str, int]:
@@ -78,8 +95,7 @@ class ExtractionResult:
         }
 
 
-@dataclass
-class WriteResult:
+class WriteResult(BaseModel):
     """写入流水线的最终输出，返回给 MemoryService / MemoryAgentService"""
 
     status: str  # "success" | "pilot_complete" | "failed"
@@ -114,7 +130,7 @@ class WritePipeline:
             memory_config: 不可变的记忆配置对象（从数据库加载）
             end_user_id: 终端用户 ID
             language: 语言 ("zh" | "en")
-            progress_callback: 可选的进度回调，签名 (stage, message, data?) -> Awaitable[None]
+            progress_callback: 可选的进度回调，签名 (stage, message, data?) -> Awaitable[None] 供pilot run使用
         """
         self.memory_config = memory_config
         self.end_user_id = end_user_id
@@ -145,7 +161,7 @@ class WritePipeline:
             is_pilot_run: 试运行模式（只萃取不写入）
 
         Returns:
-            WriteResult 包含状态和统计信息
+            WriteResult 包含状态和统计信息 
         """
         if not ref_id:
             ref_id = uuid.uuid4().hex
@@ -164,7 +180,7 @@ class WritePipeline:
             self._init_clients()
             self._init_neo4j_connector()
 
-            # Step 1: 预处理 - 消息分块
+            # Step 1: 预处理 - 消息分块 + AI消息语义剪枝（暂无实现）
             step_start = time.time()
             chunked_dialogs = await self._preprocess(messages, ref_id)
             chunks_count = sum(len(d.chunks) for d in chunked_dialogs)
@@ -175,9 +191,7 @@ class WritePipeline:
 
             # Step 2: 萃取 - 知识提取
             step_start = time.time()
-            extraction_result = await self._extract(
-                chunked_dialogs, is_pilot_run
-            )
+            extraction_result = await self._extract(chunked_dialogs, is_pilot_run)
             stats = extraction_result.stats
             logger.info(
                 f"[WritePipeline] [2/5] 萃取：知识提取 "
@@ -190,9 +204,7 @@ class WritePipeline:
             # 试运行模式到此结束
             if is_pilot_run:
                 elapsed = time.time() - pipeline_start
-                logger.info(
-                    f"[WritePipeline] 完成（试运行） ✔ {elapsed:.2f}s"
-                )
+                logger.info(f"[WritePipeline] 完成（试运行） ✔ {elapsed:.2f}s")
                 return WriteResult(
                     status="pilot_complete",
                     extraction=extraction_result.stats,
@@ -227,9 +239,7 @@ class WritePipeline:
             await self._update_stats_cache(extraction_result)
 
             elapsed = time.time() - pipeline_start
-            logger.info(
-                f"[WritePipeline] 完成 ✔ {elapsed:.2f}s"
-            )
+            logger.info(f"[WritePipeline] 完成 ✔ {elapsed:.2f}s")
             return WriteResult(
                 status="success",
                 extraction=extraction_result.stats,
@@ -251,16 +261,14 @@ class WritePipeline:
     # Step 1: 预处理
     # ──────────────────────────────────────────────
 
-    async def _preprocess(
-        self, messages: List[dict], ref_id: str
-    ) -> List[DialogData]:
+    async def _preprocess(self, messages: List[dict], ref_id: str) -> List[DialogData]:
         """
-        预处理：消息校验 → 语义剪枝 → 对话分块。
+        预处理：消息校验 → AI消息语义剪枝（暂未实现） → 对话分块。
 
         委托给 get_chunked_dialogs()，保持现有预处理逻辑不变。
         get_dialogs.py 内部已包含：
           - 消息格式校验（role/content 必填）
-          - 语义剪枝（根据 config 中 pruning_enabled 决定）
+          - AI消息语义剪枝（根据 config 中 pruning_enabled 决定）
           - DialogueChunker 分块
         """
         from app.core.memory.agent.utils.get_dialogs import get_chunked_dialogs
@@ -283,55 +291,186 @@ class WritePipeline:
         is_pilot_run: bool,
     ) -> ExtractionResult:
         """
-        萃取：初始化引擎 → 执行知识提取 → 返回结构化结果。
+        萃取：初始化引擎 → 执行知识提取 → 构建图节点/边 → 去重 → 返回结构化结果。
 
-        ExtractionOrchestrator 作为萃取引擎被调用，
-        Pipeline 不关心引擎内部的并行策略和提取细节。
+        使用 NewExtractionOrchestrator（ExtractionStep 范式）完成 LLM 萃取，
+        然后通过独立的 graph_build_step 和 dedup_step 完成图构建和去重，
+        不依赖旧编排器 ExtractionOrchestrator。
+
+        执行流程：
+        1. NewExtractionOrchestrator.run() → 萃取并赋值到 DialogData
+        2. build_graph_nodes_and_edges() → 从 DialogData 构建图节点和边
+        3. run_dedup() → 两阶段去重消歧
         """
-        from app.core.memory.storage_services.extraction_engine.extraction_orchestrator import (
-            ExtractionOrchestrator,
+        from app.core.memory.storage_services.extraction_engine.dedup_step import (
+            run_dedup,
         )
+        from app.core.memory.storage_services.extraction_engine.steps.graph_build_step import (
+            build_graph_nodes_and_edges,
+        )
+        from app.core.memory.storage_services.extraction_engine.steps.extraction_pipeline_orchestrator import (
+            NewExtractionOrchestrator,
+        )
+
         from app.core.memory.utils.config.config_utils import get_pipeline_config
+        from app.core.memory.utils.debug.pipeline_snapshot import PipelineSnapshot
 
         pipeline_config = get_pipeline_config(self.memory_config)
         ontology_types = self._load_ontology_types()
 
-        orchestrator = ExtractionOrchestrator(
+        snapshot = PipelineSnapshot("new")
+
+        # ── 新编排器：LLM 萃取 + 数据赋值 ──
+        new_orchestrator = NewExtractionOrchestrator(
             llm_client=self._llm_client,
             embedder_client=self._embedder_client,
-            connector=self._neo4j_connector,
             config=pipeline_config,
             embedding_id=str(self.memory_config.embedding_model_id),
-            language=self.language,
             ontology_types=ontology_types,
+            language=self.language,
+            is_pilot_run=is_pilot_run,
+            progress_callback=self.progress_callback,
+        )
+        # step1: 执行知识提取
+        dialog_data_list = await new_orchestrator.run(chunked_dialogs)
+
+        # ── Snapshot: 各阶段萃取结果 ── TODO 乐力齐 重构流水线切换生产环境稳定后修改
+        stage_outputs = new_orchestrator.last_stage_outputs
+        if stage_outputs:
+            stmt_results = stage_outputs.get("statement_results", {})
+            stmt_snapshot = []
+            for _did, chunk_stmts in stmt_results.items():
+                for _cid, stmts in chunk_stmts.items():
+                    for s in stmts:
+                        stmt_snapshot.append(s.model_dump())
+            snapshot.save_stage("2_statement_outputs", stmt_snapshot)
+
+            triplet_results = stage_outputs.get("triplet_results", {})
+            triplet_snapshot = {}
+            for _did, stmt_triplets in triplet_results.items():
+                for stmt_id, t_out in stmt_triplets.items():
+                    triplet_snapshot[stmt_id] = t_out.model_dump()
+            snapshot.save_stage("3_triplet_outputs", triplet_snapshot)
+
+            emotion_results = stage_outputs.get("emotion_results", {})
+            emotion_snapshot = {}
+            for stmt_id, emo in emotion_results.items():
+                if hasattr(emo, "model_dump"):
+                    emotion_snapshot[stmt_id] = emo.model_dump()
+            snapshot.save_stage("4_emotion_outputs", emotion_snapshot)
+
+            emb_output = stage_outputs.get("embedding_output")
+            if emb_output and hasattr(emb_output, "model_dump"):
+                emb_data = emb_output.model_dump()
+                for key in (
+                    "statement_embeddings",
+                    "chunk_embeddings",
+                    "entity_embeddings",
+                ):
+                    if key in emb_data and isinstance(emb_data[key], dict):
+                        emb_data[key] = {
+                            k: v[:5] if isinstance(v, list) else v
+                            for k, v in emb_data[key].items()
+                        }
+                if "dialog_embeddings" in emb_data and isinstance(
+                    emb_data["dialog_embeddings"], list
+                ):
+                    emb_data["dialog_embeddings"] = [
+                        v[:5] if isinstance(v, list) else v
+                        for v in emb_data["dialog_embeddings"]
+                    ]
+                snapshot.save_stage("5_embedding_outputs", emb_data)
+
+        # step2: 构建图节点和边 
+        graph = await build_graph_nodes_and_edges(
+            dialog_data_list=dialog_data_list,
+            embedder_client=self._embedder_client,
             progress_callback=self.progress_callback,
         )
 
-        (
-            dialogue_nodes,
-            chunk_nodes,
-            statement_nodes,
-            entity_nodes,
-            perceptual_nodes,
-            stmt_chunk_edges,
-            stmt_entity_edges,
-            entity_entity_edges,
-            perceptual_edges,
-            dialog_data_list,
-        ) = await orchestrator.run(chunked_dialogs, is_pilot_run=is_pilot_run)
+        # region Snapshot: 图节点和边（去重前）Snapshot有关的内容在重构流水线切换生产环境之后修改
+        snapshot.save_stage(
+            "6_nodes_edges_before_dedup",
+            {
+                "dialogue_nodes_count": len(graph.dialogue_nodes),
+                "chunk_nodes_count": len(graph.chunk_nodes),
+                "statement_nodes_count": len(graph.statement_nodes),
+                "entity_nodes": [
+                    {
+                        "id": e.id,
+                        "name": e.name,
+                        "entity_type": e.entity_type,
+                        "description": e.description,
+                    }
+                    for e in graph.entity_nodes
+                ],
+                "entity_entity_edges": [
+                    {
+                        "source": e.source,
+                        "target": e.target,
+                        "relation_type": e.relation_type,
+                        "statement": e.statement,
+                    }
+                    for e in graph.entity_entity_edges
+                ],
+                "stmt_entity_edges_count": len(graph.stmt_entity_edges),
+            },
+        )
 
-        return ExtractionResult(
-            dialogue_nodes=dialogue_nodes,
-            chunk_nodes=chunk_nodes,
-            statement_nodes=statement_nodes,
-            entity_nodes=entity_nodes,
-            perceptual_nodes=perceptual_nodes,
-            stmt_chunk_edges=stmt_chunk_edges,
-            stmt_entity_edges=stmt_entity_edges,
-            entity_entity_edges=entity_entity_edges,
-            perceptual_edges=perceptual_edges,
+        # step3: 两阶段去重消歧 
+        dedup_result = await run_dedup(
+            entity_nodes=graph.entity_nodes,
+            statement_entity_edges=graph.stmt_entity_edges,
+            entity_entity_edges=graph.entity_entity_edges,
+            dialog_data_list=dialog_data_list,
+            pipeline_config=pipeline_config,
+            connector=self._neo4j_connector,
+            llm_client=self._llm_client,
+            is_pilot_run=is_pilot_run,
+            progress_callback=self.progress_callback,
+        )
+
+        # Snapshot: 去重后
+        snapshot.save_stage(
+            "7_after_dedup",
+            {
+                "entity_nodes": [
+                    {
+                        "id": e.id,
+                        "name": e.name,
+                        "entity_type": e.entity_type,
+                        "description": e.description,
+                    }
+                    for e in dedup_result.entity_nodes
+                ],
+                "entity_entity_edges": [
+                    {
+                        "source": e.source,
+                        "target": e.target,
+                        "relation_type": e.relation_type,
+                        "statement": e.statement,
+                    }
+                    for e in dedup_result.entity_entity_edges
+                ],
+            },
+        )
+    
+        # step4: 构造最终结果
+        result = ExtractionResult(
+            dialogue_nodes=graph.dialogue_nodes,
+            chunk_nodes=graph.chunk_nodes,
+            statement_nodes=graph.statement_nodes,
+            entity_nodes=dedup_result.entity_nodes,
+            perceptual_nodes=graph.perceptual_nodes,
+            stmt_chunk_edges=graph.stmt_chunk_edges,
+            stmt_entity_edges=dedup_result.statement_entity_edges,
+            entity_entity_edges=dedup_result.entity_entity_edges,
+            perceptual_edges=graph.perceptual_edges,
             dialog_data_list=dialog_data_list,
         )
+
+        snapshot.save_summary(result.stats) #  TODO 乐力齐 snapshot需要改
+        return result
 
     # ──────────────────────────────────────────────
     # Step 3: 存储
@@ -379,14 +518,10 @@ class WritePipeline:
                     )
                     await asyncio.sleep(1 * (attempt + 1))
                 else:
-                    logger.error(
-                        f"Neo4j 写入在 {max_retries} 次尝试后仍部分失败"
-                    )
+                    logger.error(f"Neo4j 写入在 {max_retries} 次尝试后仍部分失败")
             except Exception as e:
                 if self._is_deadlock(e) and attempt < max_retries - 1:
-                    logger.warning(
-                        f"Neo4j 死锁，重试 ({attempt + 2}/{max_retries})"
-                    )
+                    logger.warning(f"Neo4j 死锁，重试 ({attempt + 2}/{max_retries})")
                     await asyncio.sleep(1 * (attempt + 1))
                 else:
                     raise
@@ -401,6 +536,10 @@ class WritePipeline:
 
         聚类不阻塞主写入流程，失败不影响写入结果。
         通过 Celery 异步执行，由 LabelPropagationEngine 完成实际计算。
+
+        注意：ExtractionResult.entity_nodes 已经是经过 _extract() 中
+        两阶段去重消歧（_run_dedup_and_write_summary）后的结果，
+        聚类直接基于去重后的实体 ID 执行。
         """
         if not result.entity_nodes:
             return
@@ -428,7 +567,9 @@ class WritePipeline:
             )
             logger.info(
                 f"[Clustering] 增量聚类任务已提交 - "
-                f"task_id={task.id}, entity_count={len(new_entity_ids)}"
+                f"task_id={task.id}, "
+                f"entity_count={len(new_entity_ids)}, "
+                f"source=dedup"
             )
         except Exception as e:
             logger.error(
@@ -438,9 +579,9 @@ class WritePipeline:
 
     # ──────────────────────────────────────────────
     # Step 5: 摘要
-    # （+ entity_description）
+    # （+ entity_description）+ meta_data部分在此提取
     # ──────────────────────────────────────────────
-
+# TODO 乐力齐 需要做成异步celery任务
     async def _summarize(self, chunked_dialogs: List[DialogData]) -> None:
         """
         摘要：生成情景记忆摘要 → 写入 Neo4j。
@@ -467,9 +608,7 @@ class WritePipeline:
             ms_connector = Neo4jConnector()
             try:
                 await add_memory_summary_nodes(summaries, ms_connector)
-                await add_memory_summary_statement_edges(
-                    summaries, ms_connector
-                )
+                await add_memory_summary_statement_edges(summaries, ms_connector)
             finally:
                 try:
                     await ms_connector.close()
@@ -494,9 +633,7 @@ class WritePipeline:
 
         with get_db_context() as db:
             factory = MemoryClientFactory(db)
-            self._llm_client = factory.get_llm_client_from_config(
-                self.memory_config
-            )
+            self._llm_client = factory.get_llm_client_from_config(self.memory_config)
             self._embedder_client = factory.get_embedder_client_from_config(
                 self.memory_config
             )
@@ -564,10 +701,8 @@ class WritePipeline:
             if entity_nodes:
                 eu_id = entity_nodes[0].end_user_id
                 if eu_id:
-                    neo4j_assistant_aliases = (
-                        await fetch_neo4j_assistant_aliases(
-                            self._neo4j_connector, eu_id
-                        )
+                    neo4j_assistant_aliases = await fetch_neo4j_assistant_aliases(
+                        self._neo4j_connector, eu_id
                     )
             clean_cross_role_aliases(
                 entity_nodes,
@@ -586,9 +721,7 @@ class WritePipeline:
         msg = str(e).lower()
         return "deadlockdetected" in msg or "deadlock" in msg
 
-    async def _update_stats_cache(
-        self, result: ExtractionResult
-    ) -> None:
+    async def _update_stats_cache(self, result: ExtractionResult) -> None:
         """
         将提取统计写入 Redis 活动缓存，按 workspace_id 存储。
         失败不中断主流程。
@@ -614,9 +747,7 @@ class WritePipeline:
                 f"workspace_id={self.memory_config.workspace_id}"
             )
         except Exception as e:
-            logger.warning(
-                f"写入活动统计缓存失败（不影响主流程）: {e}"
-            )
+            logger.warning(f"写入活动统计缓存失败（不影响主流程）: {e}")
 
     async def _cleanup(self) -> None:
         """
@@ -634,16 +765,14 @@ class WritePipeline:
         # 防止 'RuntimeError: Event loop is closed' 在垃圾回收时触发
         for client_obj in (self._llm_client, self._embedder_client):
             try:
-                underlying = getattr(
-                    client_obj, "client", None
-                ) or getattr(client_obj, "model", None)
+                underlying = getattr(client_obj, "client", None) or getattr(
+                    client_obj, "model", None
+                )
                 if underlying is None:
                     continue
                 inner = getattr(underlying, "_model", underlying)
                 http_client = getattr(inner, "async_client", None)
-                if http_client is not None and hasattr(
-                    http_client, "aclose"
-                ):
+                if http_client is not None and hasattr(http_client, "aclose"):
                     await http_client.aclose()
             except Exception:
                 pass

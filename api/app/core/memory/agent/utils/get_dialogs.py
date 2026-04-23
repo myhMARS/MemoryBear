@@ -1,7 +1,4 @@
-import os
-import json
 from typing import List
-from datetime import datetime
 
 from app.core.memory.storage_services.extraction_engine.knowledge_extraction.chunk_extraction import DialogueChunker
 from app.core.memory.models.message_models import DialogData, ConversationContext, ConversationMessage
@@ -34,6 +31,7 @@ async def get_chunked_dialogs(
 
     conversation_messages = []
 
+# step1: 消息格式校验 role：user、assistant。content
     for idx, msg in enumerate(messages):
         if not isinstance(msg, dict) or 'role' not in msg or 'content' not in msg:
             raise ValueError(f"Message {idx} format error: must contain 'role' and 'content' fields")
@@ -59,7 +57,7 @@ async def get_chunked_dialogs(
         config_id=config_id
     )
     
-    # 语义剪枝步骤（在分块之前）
+# step2: 语义剪枝步骤（在分块之前）
     try:
         from app.core.memory.storage_services.extraction_engine.data_preprocessing.data_pruning import SemanticPruner
         from app.core.memory.models.config_models import PruningConfig
@@ -116,6 +114,7 @@ async def get_chunked_dialogs(
     except Exception as e:
         logger.warning(f"[剪枝] 执行失败，跳过剪枝: {e}", exc_info=True)
 
+# step3： 分块
     chunker = DialogueChunker(chunker_strategy)
     extracted_chunks = await chunker.process_dialogue(dialog_data)
     dialog_data.chunks = extracted_chunks

@@ -148,7 +148,85 @@ async def write(
         all_perceptual_edges,
         all_dedup_details,
     ) = await orchestrator.run(chunked_dialogs, is_pilot_run=False)
+    
+# region TODO 乐力齐 重构流水线切换至生产环境稳定后，移除快照对比代码
+    # ── Snapshot: 旧流水线萃取结果（按 phase2_step_io_schema_v1.md 格式） ──
+    from app.core.memory.utils.debug.pipeline_snapshot import PipelineSnapshot
+    snapshot = PipelineSnapshot("legacy")
 
+    # Statement 输出（从 dialog_data_list 中提取）
+    stmt_snapshot = []
+    for d in all_dedup_details:
+        if not hasattr(d, "chunks"):
+            continue
+        for c in d.chunks:
+            for s in c.statements:
+                stmt_snapshot.append({
+                    "statement_id": s.id,
+                    "statement_text": s.statement,
+                    "statement_type": str(getattr(s, "stmt_type", "")),
+                    "temporal_type": str(getattr(s, "temporal_info", "")),
+                    "relevance": str(getattr(s, "relevence_info", "RELEVANT")),
+                    "speaker": getattr(s, "speaker", "user") or "user",
+                    "valid_at": s.temporal_validity.valid_at if s.temporal_validity else "NULL",
+                    "invalid_at": s.temporal_validity.invalid_at if s.temporal_validity else "NULL",
+                })
+    snapshot.save_stage("2_statement_outputs", stmt_snapshot)
+
+    # Triplet 输出（从 dialog_data_list 中提取）
+    triplet_snapshot = {}
+    for d in all_dedup_details:
+        if not hasattr(d, "chunks"):
+            continue
+        for c in d.chunks:
+            for s in c.statements:
+                if s.triplet_extraction_info:
+                    triplet_snapshot[s.id] = {
+                        "entities": [
+                            {
+                                "entity_idx": e.entity_idx, "name": e.name,
+                                "type": e.type, "description": e.description,
+                                "is_explicit_memory": getattr(e, "is_explicit_memory", False),
+                            }
+                            for e in s.triplet_extraction_info.entities
+                        ],
+                        "triplets": [
+                            {
+                                "subject_name": t.subject_name, "subject_id": t.subject_id,
+                                "predicate": t.predicate,
+                                "object_name": t.object_name, "object_id": t.object_id,
+                            }
+                            for t in s.triplet_extraction_info.triplets
+                        ],
+                    }
+    snapshot.save_stage("3_triplet_outputs", triplet_snapshot)
+
+    # 图节点和边（去重后）
+    snapshot.save_stage("6_nodes_edges_after_dedup", {
+        "dialogue_nodes_count": len(all_dialogue_nodes),
+        "chunk_nodes_count": len(all_chunk_nodes),
+        "statement_nodes_count": len(all_statement_nodes),
+        "entity_nodes": [
+            {"id": e.id, "name": e.name, "entity_type": e.entity_type, "description": e.description}
+            for e in all_entity_nodes
+        ],
+        "entity_entity_edges": [
+            {
+                "source": e.source, "target": e.target,
+                "relation_type": e.relation_type, "statement": e.statement,
+            }
+            for e in all_entity_entity_edges
+        ],
+    })
+    snapshot.save_summary({
+        "dialogue_count": len(all_dialogue_nodes),
+        "chunk_count": len(all_chunk_nodes),
+        "statement_count": len(all_statement_nodes),
+        "entity_count": len(all_entity_nodes),
+        "relation_count": len(all_entity_entity_edges),
+    })
+# endregion
+    
     log_time("Extraction Pipeline", time.time() - step_start, log_file)
 
     # Step 3: Save all data to Neo4j database

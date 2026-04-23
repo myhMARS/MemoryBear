@@ -149,3 +149,5 @@ class ExtractionPipelineConfig(BaseModel):
     temporal_extraction: TemporalExtractionConfig = Field(default_factory=TemporalExtractionConfig)
     deduplication: DedupConfig = Field(default_factory=DedupConfig)
     forgetting_engine: ForgettingEngineConfig = Field(default_factory=ForgettingEngineConfig)
+    # 情绪引擎（旁路模块，SidecarStepFactory 通过此字段判断是否启用）
+    emotion_enabled: bool = Field(default=False, description="是否启用情绪提取旁路")

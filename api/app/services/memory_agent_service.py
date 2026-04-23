@@ -360,40 +360,64 @@ class MemoryAgentService:
                 await write_rag(end_user_id, message_text, user_rag_memory_id)
                 return "success"
             else:
-                await write_neo4j(
-                    end_user_id=end_user_id,
-                    messages=messages,
-                    memory_config=memory_config,
-                    ref_id='',
-                    language=language
-                )
-
-                # ── 影子运行：新流水线静默执行，只记录日志不影响主流程 ──
+            # TODO 乐力齐 重构流水线切换至生产环境后，更改如下代码    
                 import os
-                if os.getenv("SHADOW_PIPELINE_ENABLED", "false").lower() == "true":
-                    try:
-                        from app.core.memory.memory_service import MemoryService
-                        import copy
+                use_new_pipeline = os.getenv("NEW_PIPELINE_ENABLED", "false").lower() == "true"
 
-                        shadow_messages = copy.deepcopy(messages)
-                        shadow_service = MemoryService(
-                            memory_config=memory_config,
-                            end_user_id=end_user_id,
-                        )
-                        shadow_result = await shadow_service.write(
-                            messages=shadow_messages,
-                            language=language,
-                            ref_id='',
-                            is_pilot_run=True,  # 试运行模式：只萃取不写入，避免重复写入 Neo4j
-                        )
-                        logger.info(
-                            f"[Shadow] 新流水线影子运行完成: status={shadow_result.status}, "
-                            f"elapsed={shadow_result.elapsed_seconds:.2f}s, "
-                            f"extraction={shadow_result.extraction}"
-                        )
-                    except Exception as shadow_err:
-                        logger.warning(f"[Shadow] 新流水线影子运行失败（不影响主流程）: {shadow_err}")
-                # ── 影子运行结束 ──
+                if use_new_pipeline:
+                    # ── 新流水线：WritePipeline + NewExtractionOrchestrator ──
+                    from app.core.memory.memory_service import MemoryService
+
+                    service = MemoryService(
+                        memory_config=memory_config,
+                        end_user_id=end_user_id,
+                    )
+                    result = await service.write(
+                        messages=messages,
+                        language=language,
+                        ref_id='',
+                        is_pilot_run=False,
+                    )
+                    logger.info(
+                        f"[NewPipeline] 完成: status={result.status}, "
+                        f"elapsed={result.elapsed_seconds:.2f}s, "
+                        f"extraction={result.extraction}"
+                    )
+                else:
+                    # ── 旧流水线：write_tools.write() + ExtractionOrchestrator ──
+                    await write_neo4j(
+                        end_user_id=end_user_id,
+                        messages=messages,
+                        memory_config=memory_config,
+                        ref_id='',
+                        language=language
+                    )
+
+                    # ── 影子运行：新流水线静默执行，只记录日志不影响主流程 ──
+                    if os.getenv("SHADOW_PIPELINE_ENABLED", "false").lower() == "true":
+                        try:
+                            from app.core.memory.memory_service import MemoryService
+                            import copy
+
+                            shadow_messages = copy.deepcopy(messages)
+                            shadow_service = MemoryService(
+                                memory_config=memory_config,
+                                end_user_id=end_user_id,
+                            )
+                            shadow_result = await shadow_service.write(
+                                messages=shadow_messages,
+                                language=language,
+                                ref_id='',
+                                is_pilot_run=True,
+                            )
+                            logger.info(
+                                f"[Shadow] 新流水线影子运行完成: status={shadow_result.status}, "
+                                f"elapsed={shadow_result.elapsed_seconds:.2f}s, "
+                                f"extraction={shadow_result.extraction}"
+                            )
+                        except Exception as shadow_err:
+                            logger.warning(f"[Shadow] 新流水线影子运行失败（不影响主流程）: {shadow_err}")
+                    # ── 影子运行结束 ──
                 for lang in ["zh", "en"]:
                     deleted = await InterestMemoryCache.delete_interest_distribution(
                         end_user_id, lang
