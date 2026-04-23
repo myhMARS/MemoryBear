@@ -256,8 +256,10 @@ class MemoryExplicitService(MemoryBaseService):
                 s.content AS content,
                 s.created_at AS created_at
             ORDER BY s.created_at DESC
-            SKIP {skip} LIMIT {pagesize}
+            SKIP $skip LIMIT $limit
             """
+            params["skip"] = skip
+            params["limit"] = pagesize
 
             result = await self.neo4j_connector.execute_query(data_query, **params)
 

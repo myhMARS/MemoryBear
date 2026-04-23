@@ -1,5 +1,6 @@
 """API Key 工具函数"""
 import secrets
+import uuid as _uuid
 from typing import Optional, Union
 from datetime import datetime
 
@@ -112,9 +113,18 @@ def validate_end_user_in_workspace(
         EndUser ORM 对象（校验通过时）
 
     Raises:
+        BusinessException(INVALID_PARAMETER): end_user_id 格式无效
         BusinessException(USER_NOT_FOUND): end_user 不存在
         BusinessException(PERMISSION_DENIED): end_user 不属于该 workspace
     """
+    try:
+        _uuid.UUID(end_user_id)
+    except (ValueError, AttributeError):
+        raise _BusinessException(
+            f"Invalid end_user_id format: {end_user_id}",
+            _BizCode.INVALID_PARAMETER,
+        )
+
     end_user_repo = _EndUserRepository(db)
     end_user = end_user_repo.get_end_user_by_id(end_user_id)
 
