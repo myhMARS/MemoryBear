@@ -276,7 +276,7 @@ const ExplicitDetail: FC = () => {
                   {total > PAGE_SIZE && (
                     <Pagination
                       current={currentPagination.page}
-                      pageSize={PAGE_SIZE}
+                      pageSize={currentPagination.pagesize}
                       total={total}
                       onChange={handlePageChange}
                       size="small"
