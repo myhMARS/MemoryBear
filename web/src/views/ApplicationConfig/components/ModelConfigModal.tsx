@@ -178,6 +178,7 @@ const ModelConfigModal = forwardRef<ModelConfigModalRef, ModelConfigModalProps>(
           name="thinking_budget_tokens"
           label={t('application.thinking_budget_tokens')}
           hidden={!['model', 'chat'].includes(source) || !(values?.deep_thinking || values?.capability?.includes('thinking'))}
+          extra={<>{t('application.range')}: [{0}, {t(`application.max_tokens`)}: {values?.max_tokens}]</>}
           rules={[
             { required: values?.deep_thinking, message: t('common.pleaseEnter') },
             {
@@ -192,7 +193,7 @@ const ModelConfigModal = forwardRef<ModelConfigModalRef, ModelConfigModalProps>(
           ]}
         >
           <RbSlider
-            step={0}
+            step={1}
             min={0}
             max={32000}
             isInput={true}
