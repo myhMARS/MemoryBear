@@ -203,7 +203,8 @@ class ConversationRepository:
             self,
             app_id: uuid.UUID,
             workspace_id: uuid.UUID,
-            is_draft: Optional[bool] = None,
+            is_draft: bool = False,
+            keyword: Optional[str] = None,
             page: int = 1,
             pagesize: int = 20
     ) -> tuple[list[Conversation], int]:
@@ -213,29 +214,38 @@ class ConversationRepository:
         Args:
             app_id: 应用 ID
             workspace_id: 工作空间 ID
-            is_draft: 是否草稿会话（None 表示不过滤）
+            is_draft: 是否草稿会话（默认False，即发布会话）
+            keyword: 搜索关键词（匹配消息内容）
             page: 页码（从 1 开始）
             pagesize: 每页数量
 
         Returns:
             Tuple[List[Conversation], int]: (会话列表，总数)
         """
-        stmt = select(Conversation).where(
+        base_stmt = select(Conversation).where(
             Conversation.app_id == app_id,
             Conversation.workspace_id == workspace_id,
-            Conversation.is_active.is_(True)
+            Conversation.is_active.is_(True),
+            Conversation.is_draft == is_draft
         )
 
-        if is_draft is not None:
-            stmt = stmt.where(Conversation.is_draft == is_draft)
+        # 如果有关键词搜索，通过子查询过滤包含该关键词的 conversation
+        if keyword:
+            # 查找包含关键词的 conversation_id 列表
+            keyword_stmt = (
+                select(Message.conversation_id)
+                .where(Message.content.ilike(f"%{keyword}%"))
+                .distinct()
+            )
+            base_stmt = base_stmt.where(Conversation.id.in_(keyword_stmt))
 
         # Calculate total number of records
         total = int(self.db.execute(
-            select(func.count()).select_from(stmt.subquery())
+            select(func.count()).select_from(base_stmt.subquery())
         ).scalar_one())
 
         # Apply pagination
-        stmt = stmt.order_by(desc(Conversation.updated_at))
+        stmt = base_stmt.order_by(desc(Conversation.updated_at))
         stmt = stmt.offset((page - 1) * pagesize).limit(pagesize)
 
         conversations = list(self.db.scalars(stmt).all())
@@ -245,6 +255,7 @@ class ConversationRepository:
             extra={
                 "app_id": str(app_id),
                 "workspace_id": str(workspace_id),
+                "keyword": keyword,
                 "returned": len(conversations),
                 "total": total
             }

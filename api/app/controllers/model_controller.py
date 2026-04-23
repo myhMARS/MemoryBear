@@ -373,7 +373,6 @@ def delete_composite_model(
 
 
 @router.put("/{model_id}", response_model=ApiResponse)
-@check_model_activation_quota
 def update_model(
     model_id: uuid.UUID,
     model_data: model_schema.ModelConfigUpdate,
