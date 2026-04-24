@@ -447,6 +447,19 @@ class BaseNode(ABC):
             "error": error_message
         }
 
+        # if error_edge:
+        #     # If an error edge exists, log a warning and continue to error node
+        #     logger.warning(
+        #         f"Node {self.node_id} execution failed, redirecting to error node: {error_edge['target']}"
+        #     )
+        #     return {
+        #         "node_outputs": {
+        #             self.node_id: node_output
+        #         },
+        #         "error": error_message,
+        #         "error_node": self.node_id
+        #     }
+        # else:
         writer = get_stream_writer()
         writer({
             "type": "node_error",
