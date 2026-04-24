@@ -357,7 +357,7 @@ const Agent = forwardRef<AgentRef, { onFeaturesLoad?: (features: FeaturesConfigF
     const { statement = '' } = value?.opening_statement || {}
     onFeaturesLoad?.(value)
 
-    if (value.opening_statement.enabled) {
+    if (value?.opening_statement?.enabled) {
       const usedVars = [...new Set([...(statement?.matchAll(/\{\{(\w+)\}\}/g) ?? [])].map(m => m[1]))]
       const variables = values?.variables
       const validNames = new Set(variables.map(v => v.name))

@@ -272,9 +272,8 @@ const ChatContent: FC<ChatContentProps> = ({
                     <Flex vertical gap={4} className="rb:mt-1! rb:pt-3! rb-border-t rb:mb-2!">
                       <div className="rb:font-medium">{t('memoryConversation.citations')}</div>
                       {item.meta_data?.citations?.map((citation, idx) => (
-                        <Flex align="center" gap={12}>
+                        <Flex key={idx} align="center" gap={12}>
                           <div
-                            key={idx}
                             className="rb:text-[#155EEF] rb:leading-5 rb:underline rb:cursor-pointer"
                             onClick={() => {
                               const params = new URLSearchParams({ documentId: citation.document_id, parentId: citation.knowledge_id });
