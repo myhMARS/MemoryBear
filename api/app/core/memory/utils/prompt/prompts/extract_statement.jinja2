@@ -1,315 +1,505 @@
-{% macro tidy(name) -%}
-  {{ name.replace('_', ' ')}}
+{% macro render_input() -%}
+{{ input_json }}
 {%- endmacro %}
-
 
 ===Tasks===
 
 {% if language == "zh" %}
-你的任务是根据详细的提取指南，从提供的对话片段中识别和提取陈述句。
-每个陈述句必须按照下面提到的标准进行标记。
+你的任务是从提供的目标文本中识别并提取陈述句，并为每条陈述句标注以下信息：
+
+- statement_id
+- statement_text
+- statement_type
+- temporal_type
+- has_unsolved_reference
+- valid_at
+- invalid_at
+
+每条输出都应是一个结构化的记忆候选陈述句。
 {% else %}
-Your task is to identify and extract declarative statements from the provided conversational chunk based on the detailed extraction guidelines. 
-Each statement must be labeled as per the criteria mentioned below.
+Your task is to identify and extract declarative statements from the provided target text, and annotate each extracted statement with:
+
+- statement_id
+- statement_text
+- statement_type
+- temporal_type
+- has_unsolved_reference
+- valid_at
+- invalid_at
+
+Each output item should be a structured candidate memory statement.
 {% endif %}
 
 ===Inputs===
-{% if inputs %}
-{% for key, val in inputs.items() %}
-- {{ key }}: {{val}}
-{% endfor %}
-{% endif %}
-
-
-===Extraction Instructions===
 {% if language == "zh" %}
-{% if granularity %}
-{% if granularity == 3 %}
-原子化和清晰：构建陈述句以清楚地显示单一的主谓宾关系。最好有多个较小的陈述句，而不是一个复杂的陈述句。
-上下文独立：陈述句必须在不需要阅读整个对话的情况下可以理解。
-{% elif granularity == 2 %}
-在句子级别提取陈述句。每个陈述句应对应一个单一、完整的思想（通常是来源中的一个完整句子），但要重新表述以获得最大的清晰度，删除对话填充词（例如，"嗯"、"像"、感叹词）。
-{% elif granularity == 1 %}
-仅提取精华句子，并将片段总结为多个独立的陈述句，每个陈述句关注事实陈述、用户偏好、关系和显著的时间上下文。
-{% endif %}
-{% endif %}
 
-上下文解析要求：
-- 将指示代词（"那个"、"这个"、"那些"、"这些"）解析为其具体指代对象
-- 如果陈述句包含无法从对话上下文中解析的模糊引用，则：
-  a) 扩展陈述句以包含对话早期的缺失上下文
-  b) 标记陈述句为需要额外上下文
-  c) 如果陈述句在没有上下文的情况下变得无意义，则跳过提取
+- chunk_id: chunk 唯一 ID
+- end_user_id: 终端用户 ID
+- target_content: 当前要处理的对话片段文本，也是唯一允许被抽取的目标文本
+- target_message_date: 目标文本对应的时间，用于解析相对时间表达
+- supporting_context: 完整对话上下文，仅用于辅助理解 target_content，不能单独贡献新的可抽取事实
+- supporting_context.msgs: 按顺序提供的上下文消息，可包含 User 和 Assistant
+  {% else %}
+- chunk_id: unique chunk identifier
+- end_user_id: end-user identifier
+- target_content: the current dialogue fragment to process, and the only text span that may be extracted from
+- target_message_date: the reference time for the target content, used for resolving relative temporal expressions
+- supporting_context: full dialogue context used only to help interpret target_content and must not independently contribute new extractable facts
+- supporting_context.msgs: ordered contextual messages, which may include User and Assistant messages
+  {% endif %}
 
-对话上下文和共指消解：
-- 将每个陈述句归属于说出它的参与者。
-- **对于用户的发言：必须使用"用户"作为主语**，禁止将"用户"或"我"替换为用户的真实姓名或别名。例如，用户说"我叫张三"应提取为"用户叫张三"，而不是"张三叫张三"。
-- 对于 AI 助手的发言：使用"助手"或"AI助手"作为主语。
-- 将所有代词解析为对话上下文中的具体人物或实体，但"我"必须解析为"用户"。
-- 识别并将抽象引用解析为其具体名称（如果提到）。
-- 将缩写和首字母缩略词扩展为其完整形式。
-{% else %}
-{% if granularity %}
-{% if granularity == 3 %}
-Atomic & Clear: Structure statements to clearly show a single subject-predicate-object relationship. It is better to have multiple smaller statements than one complex one.
-Context-Independent: Statements must be understandable without needing to read the entire conversation.
-{% elif granularity == 2 %}
-Extract statements at the sentence level. Each statement should correspond to a single, complete thought (typically a full sentence from the source) but be rephrased for maximum clarity, removing conversational filler (e.g., 'um,' 'like,' interjections).
-{% elif granularity == 1 %}
-Extract only essence sentences and summarize the chunk into multiple, standalone statements, each focusing on factual statements, user preferences, relationships, and salient temporal context.
-{% endif %}
-{% endif %}
-
-Context Resolution Requirements:
-- Resolve demonstrative pronouns ("that," "this," "those") to their specific referents
-- If a statement contains vague references that cannot be resolved from the conversation context, either:
-  a) Expand the statement to include the missing context from earlier in the conversation
-  b) Mark the statement as requiring additional context
-  c) Skip extraction if the statement becomes meaningless without context
-
-Conversational Context & Co-reference Resolution:
-- Attribute every statement to the participant who uttered it.
-- **For user's statements: always use "用户" (User) as the subject**. Do NOT replace "用户" or "I" with the user's real name or alias. For example, if the user says "I'm John", extract as "用户 is John", not "John is John".
-- For AI assistant's statements: use "助手" or "AI助手" as the subject.
-- Resolve all pronouns to the specific person or entity from the conversation's context, but "I"/"我" must always resolve to "用户".
-- Identify and resolve abstract references to their specific names if mentioned.
-- Expand abbreviations and acronyms to their full form.
-{% endif %}
-
-{% if include_dialogue_context %}
+===Scope===
 {% if language == "zh" %}
-===完整对话上下文===
-以下是完整的对话上下文，以帮助您理解引用、代词和对话流程：
-{% else %}
-===Full Dialogue Context===
-The following is the complete dialogue context to help you understand references, pronouns, and conversational flow:
-{% endif %}
 
-{{ dialogue_context }}
+- 只从 `target_content` 中提取陈述句。
+- `supporting_context.msgs` 只用于解释 `target_content` 中的代词、省略、主体、时间和语义背景。
+- 不要从 `supporting_context.msgs` 中单独提取任何陈述句。
+- 如果某条信息没有出现在 `target_content` 中，即使它出现在 `supporting_context.msgs` 中，也不能把它作为独立 statement 输出。
+- 如果 Assistant 在 `supporting_context.msgs` 中提供了总结、猜测、解释或改写，这些内容只能作为理解辅助，不能被当作事实直接提取。
+- 每条输出的 statement 都必须能够在 `target_content` 中找到直接对应的表达依据。
+  {% else %}
+- Extract statements only from `target_content`.
+- `supporting_context.msgs` is used only to interpret references, ellipsis, subjects, temporal expressions, and semantic background in `target_content`.
+- Do not extract any standalone statement from `supporting_context.msgs`.
+- If a piece of information does not appear in `target_content`, it must not be output as an independent statement even if it appears in `supporting_context.msgs`.
+- If the Assistant in `supporting_context.msgs` provides a summary, guess, interpretation, or rephrasing, treat it only as interpretive support and never as a direct factual source for extraction.
+- Every output statement must be directly grounded in wording from `target_content`.
+  {% endif %}
 
+===Extraction Rules===
 {% if language == "zh" %}
-===对话上下文结束===
-{% else %}
-===End of Dialogue Context===
-{% endif %}
-{% endif %}
+拆分规则：
 
-{% if language == "zh" %}
-过滤和格式化：
+- 以“一个完整意思”为单位提取陈述句，通常对应一个完整句子或一个自然语义片段。
+- 默认保留句子级结构；只有当一个句子内部包含两个及以上彼此独立、拆开后明显更清楚的重要信息时，才拆成多条。
+- 宁可多提取，也不要漏掉 `target_content` 中能独立成立、且语义稳定的 statement。
+- 但不要为了提高覆盖率而引入原文没有的信息，或输出语义不成立的 statement。
+
+用户主语归一化：
+
+- 如果陈述句的主语是用户本人，无论上下文中给出的用户名称、昵称、别名或真实姓名是什么，提取后的陈述句统一使用“用户”作为主语，不要使用用户的具体名字或别名。
+- 这是硬规则；如果用户主语没有统一成“用户”，则该 statement 视为不合格。
+
+共指消解：
+
+- 如果可以解析到具体实体名，优先输出具体实体名，并将 `has_unsolved_reference` 设为 `false`。
+- 如果不能解析到具体实体名，但可以解析到最小必要描述，则输出该最小必要描述，并将 `has_unsolved_reference` 设为 `true`。
+- 如果既不能解析到具体实体名，也不能稳定解析到最小必要描述，则保留最小必要原始表达，并将 `has_unsolved_reference` 设为 `true`。
+- 对涉及用户与其他人的共同活动，优先写成“用户和谁……”的形式，而不是保留“我们”“他们”这类未展开表达。
+
+清晰指代与模糊指代：
+
+- 只有当当前 `supporting_context` 足以将引用稳定映射到具体实体名时，才算 fully resolved。
+- `张三`、`老张`（且上下文中明确就是张三）、`李教授`、`王老师` 属于清晰指代。
+- `用户的朋友`、`用户的同事`、`某位老师`、`一位面试官` 这类最小必要描述允许输出，但仍然算 unresolved。
+- `朋友`、`前天那个人`、`那个`、`这个`、`那些`、`那两个`、`对方`、`他/她`（且无唯一可解对象）属于模糊指代。
+
+过滤：
 
 - 仅提取陈述句。
-  不要提取问题、命令、问候语或对话填充词。
-时间精度：
+- 不要提取问题、命令、问候语或对话填充词。
 
-包括任何明确的日期、时间或定量限定符。
-如果一个句子既描述了事件的开始（静态）又描述了其持续性质（动态），则将两者提取为单独的陈述句。
-{% else %}
-Filtering and Formatting:
+statement_type：
+
+- `FACT`：用户陈述的事实、状态、关系、经历、行为、事件或计划等现实描述。
+- `OPINION`：主观评价、态度、判断、感受、看法，例如“我觉得”“我担心”。
+- `OTHER`：不应归入 `FACT` 或 `OPINION` 的其他陈述；“我希望……”默认标为 `OTHER`。
+- 不要因为句子带有主观色彩就自动判为 `OPINION`；只有在其核心是个人判断、态度、感受或评价时才标为 `OPINION`。
+
+时间规则：
+
+- 仅使用目标文本中明确陈述或可由 `target_message_date` 直接解析的时间信息；不要使用外部知识补时间。
+- 使用 `target_message_date` 作为“现在”来解释相对时间，例如“昨天”“上周五”“下个月”。
+- `valid_at` 表示陈述开始成立或生效的时间。
+- `invalid_at` 表示陈述结束或不再成立的时间；如果仍在持续，填 `"NULL"`。
+- 时间格式优先使用 ISO 8601。
+- 对于只有日期没有时分秒的时间，默认使用整天边界，便于后续检索。
+- 如果没有明确时间，不要编造时间。
+- 对于点状事件（例如某天发生的一次考试、一次见面、一次提交），`valid_at` 和 `invalid_at` 都应填写为该事件的起止边界；不要只填 `valid_at`。
+
+temporal_type：
+
+- `STATIC`：相对稳定、持续性的状态、身份、属性、长期偏好、长期关系、长期职业或长期居住状态；若带起始时间，可填 `valid_at`，`invalid_at` 必须为 `"NULL"`。
+- `DYNAMIC`：有明确时间范围、阶段性持续、可结束或已结束的事件、活动、计划、任务或临时状态。
+- `ATEMPORAL`：普遍事实、定义、常识、百科知识、数学事实或无具体时间边界的泛化陈述；`valid_at` 和 `invalid_at` 都必须为 `"NULL"`。
+- 不要因为句子里出现时间词就机械地标为 `DYNAMIC`。
+
+改写边界：
+
+- 允许为解决代词、省略和时间歧义做最小必要改写。
+- 不要引入原文未明确表达的新事实、额外推断或风格化概括。
+  {% else %}
+  Granularity:
+- Extract statements at the level of one complete thought, usually one full sentence or one natural semantic unit.
+- Preserve sentence-level structure by default; split only when a sentence contains two or more independent and important pieces of information that become clearly easier to understand when separated.
+- Prefer higher recall: do not miss independently valid and semantically stable statements in `target_content`.
+- But do not increase recall by inventing unsupported facts or emitting semantically unstable statements.
+
+User-subject normalization:
+
+- If the subject of a statement is the user, always use “the user” as the subject in the extracted statement, regardless of whether the context provides the user’s real name, nickname, alias, or other identifier.
+- This is a hard rule. If a user-subject statement does not use “the user,” treat it as invalid.
+
+Coreference resolution:
+
+- If you can resolve to a concrete named entity, output that name and set `has_unsolved_reference` to `false`.
+- If you cannot resolve to a concrete named entity but can resolve to a minimal grounded description, output that description and set `has_unsolved_reference` to `true`.
+- If you cannot even resolve to a stable minimal grounded description, keep the minimal original expression and set `has_unsolved_reference` to `true`.
+- For shared activities involving the user and others, prefer forms like “the user and X...” rather than unresolved expressions like “we” or “they”.
+
+Clear vs unresolved reference:
+
+- A reference is fully resolved only if the current `supporting_context` can map it to a concrete named entity.
+- `Zhang San`, `Old Zhang` when clearly resolved to Zhang San, `Professor Li`, and `Teacher Wang` are clear references.
+- `the user's friend`, `the user's coworker`, `a teacher`, and `an interviewer` are allowed outputs but still count as unresolved.
+- `friend`, `that person from the other day`, `that one`, `this one`, `those`, `the two of them`, `the other party`, and `he/she` without a unique referent are unresolved.
+
+Filtering:
 
 - Extract only declarative statements.
-  DO NOT extract questions, commands, greetings, or conversational filler.
-Temporal Precision:
+- Do not extract questions, commands, greetings, or conversational filler.
 
-Include any explicit dates, times, or quantitative qualifiers.
-If a sentence describes both the start of an event (static) and its ongoing nature (dynamic), extract both as separate statements.
-{% endif %}
+statement_type:
 
-{%- if definitions %}
-  {%- for section_key, section_dict in definitions.items() %}
-==== {{ tidy(section_key) | upper }} {% if language == "zh" %}定义和指导{% else %}DEFINITIONS & GUIDANCE{% endif %} ====
-    {%- for category, details in section_dict.items() %}
-{{ loop.index }}. {{ category }}
-- {% if language == "zh" %}定义{% else %}Definition{% endif %}: {{ details.get("definition", "") }}
-    {% endfor -%}
-  {% endfor -%}
-{% endif -%}
+- `FACT`: user-stated facts, states, relationships, experiences, behaviors, events, or plans.
+- `OPINION`: subjective judgments, attitudes, feelings, evaluations, or viewpoints, such as “I think...” or “I worry...”.
+- `OTHER`: statements that should not be categorized as `FACT` or `OPINION`; statements like “I hope...” default to `OTHER`.
+- Do not classify a statement as `OPINION` merely because it sounds subjective; use `OPINION` only when its core content is a personal judgment, attitude, feeling, or evaluation.
+
+Temporal rules:
+
+- Use only temporal information explicitly stated in the target text or directly resolvable from `target_message_date`; do not add dates from external knowledge.
+- Use `target_message_date` as “now” when interpreting relative expressions such as “yesterday,” “last Friday,” or “next month.”
+- `valid_at` means when the statement became valid or started to hold.
+- `invalid_at` means when the statement ended or stopped being valid; use `"NULL"` if it is still ongoing.
+- Prefer ISO 8601 for time values.
+- When only a date can be resolved, default to full-day boundaries for retrieval use.
+- If no explicit time is available, do not invent one.
+- For point-in-time events such as a single exam, a meeting, or a submission on one day, populate both `valid_at` and `invalid_at`; do not fill only `valid_at`.
+
+temporal_type:
+
+- `STATIC`: relatively stable, ongoing states, identities, attributes, long-term preferences, long-term relationships, occupations, or residence states.
+- `DYNAMIC`: events, activities, plans, tasks, or temporary states with a bounded or potentially bounded time span.
+- `ATEMPORAL`: general facts, definitions, common knowledge, encyclopedic knowledge, mathematical facts, or generalized statements without meaningful temporal boundaries; both `valid_at` and `invalid_at` must be `"NULL"`.
+- Do not classify a statement as `DYNAMIC` merely because it contains a time word.
+
+Rewrite boundary:
+
+- Minimal rewriting is allowed only to resolve reference, ellipsis, and temporal ambiguity.
+- Do not introduce unsupported facts, extra inference, or stylistic summarization.
+  {% endif %}
 
 ===Examples===
 {% if language == "zh" %}
-示例 1: 英文对话
-示例片段: """
-日期: 2024年3月15日
-参与者:
-- Sarah Chen (用户)
-- 助手 (AI)
-
-用户: "我最近一直在尝试水彩画，画了一些花朵。"
-AI: "水彩画很有趣！水彩颜料通常由颜料与阿拉伯树胶等粘合剂混合而成。你觉得怎么样？"
-用户: "我认为色彩组合可以改进，但我真的很喜欢玫瑰和百合。"
-"""
+示例 1:
+示例输入: {
+  "chunk_id": "chunk_a1b2c3d4",
+  "end_user_id": "eu_12345678",
+  "target_content": "老李这学期要求还是一如既往地严，不过他讲课确实清晰透彻，而且每节课的结构都特别清楚。就是气场实在太吓人了，我每次被他点名都有点发怵。",
+  "target_message_date": "2023-09-04T18:00:00",
+  "supporting_context": {
+    "msgs": [
+      {
+        "role": "User",
+        "msg": "今天是九月第一周的星期一，上了本学期第一节数据库课。作为班长，我帮李教授发了教学大纲。老李宣布的期末项目考核标准特别严，看了一眼大纲上的作业量，我感觉这学期恐怕要脱层皮。不过老李讲课确实清晰透彻，就是气场实在太吓人了。"
+      },
+      {
+        "role": "Assistant",
+        "msg": "听起来你对这门课既佩服又有点压力，李教授应该是很有气场的老师。"
+      }
+    ]
+  }
+}
 
 示例输出: {
   "statements": [
     {
-      "statement": "用户最近一直在尝试水彩画。",
-      "statement_type": "FACT",
-      "temporal_type": "DYNAMIC",
-      "relevance": "RELEVANT"
-    },
-    {
-      "statement": "用户画了一些花朵。",
-      "statement_type": "FACT",
-      "temporal_type": "DYNAMIC",
-      "relevance": "RELEVANT"
-    },
-    {
-      "statement": "水彩颜料通常由颜料与阿拉伯树胶等粘合剂混合而成。",
-      "statement_type": "FACT",
-      "temporal_type": "ATEMPORAL",
-      "relevance": "IRRELEVANT"
-    },
-    {
-      "statement": "用户认为她的水彩画中的色彩组合可以改进。",
+      "statement_id": "stmt_e5f6g7h8",
+      "statement_text": "李教授这学期要求很严。",
       "statement_type": "OPINION",
-      "temporal_type": "STATIC",
-      "relevance": "RELEVANT"
+      "temporal_type": "DYNAMIC",
+      "has_unsolved_reference": false,
+      "valid_at": "2023-09-04T18:00:00",
+      "invalid_at": "NULL"
     },
     {
-      "statement": "用户真的很喜欢玫瑰和百合。",
-      "statement_type": "FACT",
-      "temporal_type": "STATIC",
-      "relevance": "RELEVANT"
+      "statement_id": "stmt_i9j0k1l2",
+      "statement_text": "李教授讲课清晰透彻。",
+      "statement_type": "OPINION",
+      "temporal_type": "ATEMPORAL",
+      "has_unsolved_reference": false,
+      "valid_at": "NULL",
+      "invalid_at": "NULL"
+    },
+    {
+      "statement_id": "stmt_m1n2o3p4",
+      "statement_text": "李教授的气场很吓人。",
+      "statement_type": "OPINION",
+      "temporal_type": "ATEMPORAL",
+      "has_unsolved_reference": false,
+      "valid_at": "NULL",
+      "invalid_at": "NULL"
     }
   ]
 }
 
-示例 2: 中文对话示例
-示例片段: """
-日期: 2024年3月15日
-参与者:
-- 张曼婷 (用户)
-- 小助手 (AI助手)
-
-用户: "我最近在尝试水彩画，画了一些花朵。"
-AI: "水彩画很有趣！水彩颜料通常由颜料和阿拉伯树胶等粘合剂混合而成。你觉得怎么样？"
-用户: "我觉得色彩搭配还有提升的空间，不过我很喜欢玫瑰和百合这两种花。"
-"""
+示例 2:
+示例输入: {
+  "chunk_id": "chunk_b2c3d4e5",
+  "end_user_id": "eu_12345678",
+  "target_content": "我最近在学 Python，每天晚上都会练一个小时。这周还打算先把基础语法和函数部分过一遍。",
+  "target_message_date": "2026-04-01T00:00:00",
+  "supporting_context": {
+    "msgs": [
+      {
+        "role": "User",
+        "msg": "我最近在学 Python。"
+      },
+      {
+        "role": "Assistant",
+        "msg": "Python 是一个很实用的语言。"
+      }
+    ]
+  }
+}
 
 示例输出: {
   "statements": [
     {
-      "statement": "用户最近在尝试水彩画。",
+      "statement_id": "stmt_m3n4o5p6",
+      "statement_text": "用户最近在学 Python。",
       "statement_type": "FACT",
       "temporal_type": "DYNAMIC",
-      "relevance": "RELEVANT"
+      "has_unsolved_reference": false,
+      "valid_at": "2026-04-01T00:00:00",
+      "invalid_at": "NULL"
     },
     {
-      "statement": "用户画了一些花朵。",
+      "statement_id": "stmt_q7r8s9t0",
+      "statement_text": "用户最近每天晚上都会练一个小时 Python。",
       "statement_type": "FACT",
       "temporal_type": "DYNAMIC",
-      "relevance": "RELEVANT"
+      "has_unsolved_reference": false,
+      "valid_at": "2026-04-01T00:00:00",
+      "invalid_at": "NULL"
     },
     {
-      "statement": "水彩颜料通常由颜料和阿拉伯树胶等粘合剂混合而成。",
+      "statement_id": "stmt_u1v2w3x4",
+      "statement_text": "用户这周打算先复习 Python 的基础语法和函数部分。",
       "statement_type": "FACT",
-      "temporal_type": "ATEMPORAL",
-      "relevance": "IRRELEVANT"
-    },
+      "temporal_type": "DYNAMIC",
+      "has_unsolved_reference": false,
+      "valid_at": "2026-04-01T00:00:00",
+      "invalid_at": "NULL"
+    }
+  ]
+}
+
+示例 3:
+示例输入: {
+  "chunk_id": "chunk_c3d4e5f6",
+  "end_user_id": "eu_12345678",
+  "target_content": "这周老师新布置的那两个我觉得有点难，而且我昨晚看了半天还是没太搞明白。要是周末再弄不出来，我可能就得去问助教了。",
+  "target_message_date": "2026-04-01T00:00:00",
+  "supporting_context": {
+    "msgs": [
+      {
+        "role": "User",
+        "msg": "这周老师新布置的那两个我觉得有点难，而且我昨晚看了半天还是没太搞明白。要是周末再弄不出来，我可能就得去问助教了。"
+      },
+      {
+        "role": "Assistant",
+        "msg": "听起来你卡在老师这周新布置的两个内容上了，如果周末还没进展，再去问助教也可以。"
+      }
+    ]
+  }
+}
+
+示例输出: {
+  "statements": [
     {
-      "statement": "用户觉得水彩画的色彩搭配还有提升的空间。",
+      "statement_id": "stmt_y5z6a7b8",
+      "statement_text": "用户觉得那两个有点难。",
       "statement_type": "OPINION",
-      "temporal_type": "STATIC",
-      "relevance": "RELEVANT"
+      "temporal_type": "DYNAMIC",
+      "has_unsolved_reference": true,
+      "valid_at": "2026-04-01T00:00:00",
+      "invalid_at": "NULL"
     },
     {
-      "statement": "用户很喜欢玫瑰和百合。",
+      "statement_id": "stmt_c9d0e1f2",
+      "statement_text": "用户昨晚看了半天那两个还是没太搞明白。",
       "statement_type": "FACT",
-      "temporal_type": "STATIC",
-      "relevance": "RELEVANT"
+      "temporal_type": "DYNAMIC",
+      "has_unsolved_reference": true,
+      "valid_at": "2026-03-31T00:00:00",
+      "invalid_at": "2026-03-31T23:59:59"
+    },
+    {
+      "statement_id": "stmt_g3h4i5j6",
+      "statement_text": "如果周末还弄不出来，用户可能会去问助教。",
+      "statement_type": "OTHER",
+      "temporal_type": "DYNAMIC",
+      "has_unsolved_reference": true,
+      "valid_at": "2026-04-01T00:00:00",
+      "invalid_at": "NULL"
     }
   ]
 }
 {% else %}
-Example 1: English Conversation
-Example Chunk: """
-Date: March 15, 2024
-Participants:
-- Sarah Chen (User)
-- Assistant (AI)
-
-User: "I've been trying watercolor painting recently and painted some flowers."
-AI: "Watercolor painting is very interesting! Watercolor paints are typically made from pigments mixed with binders like gum arabic. How do you like it?"
-User: "I think the color combinations could use some improvement, but I really like roses and lilies."
-"""
+Example 1:
+Example Input: {
+  "chunk_id": "chunk_a1b2c3d4",
+  "end_user_id": "eu_12345678",
+  "target_content": "Old Li is just as strict as ever this semester, but he really explains things clearly and the structure of every class is extremely clear. His presence is honestly kind of intimidating, and I get nervous every time he calls on me.",
+  "target_message_date": "2023-09-04T18:00:00",
+  "supporting_context": {
+    "msgs": [
+      {
+        "role": "User",
+        "msg": "Today was the Monday of the first week of September, and I had the first database class of the semester. As class monitor, I helped Professor Li distribute the syllabus. Professor Li said the grading criteria for the final project would be very strict. Old Li is just as strict as ever this semester, but he really explains things clearly and the structure of every class is extremely clear. His presence is honestly kind of intimidating."
+      },
+      {
+        "role": "Assistant",
+        "msg": "It sounds like you admire the teaching but also feel pressured by Professor Li."
+      }
+    ]
+  }
+}
 
 Example Output: {
   "statements": [
     {
-      "statement": "用户 has been trying watercolor painting recently.",
-      "statement_type": "FACT",
-      "temporal_type": "DYNAMIC",
-      "relevance": "RELEVANT"
-    },
-    {
-      "statement": "用户 painted some flowers.",
-      "statement_type": "FACT",
-      "temporal_type": "DYNAMIC",
-      "relevance": "RELEVANT"
-    },
-    {
-      "statement": "Watercolor paints are typically made from pigments mixed with binders like gum arabic.",
-      "statement_type": "FACT",
-      "temporal_type": "ATEMPORAL",
-      "relevance": "IRRELEVANT"
-    },
-    {
-      "statement": "用户 thinks the color combinations in her watercolor paintings could use some improvement.",
+      "statement_id": "stmt_e5f6g7h8",
+      "statement_text": "Professor Li is very strict this semester.",
       "statement_type": "OPINION",
-      "temporal_type": "STATIC",
-      "relevance": "RELEVANT"
+      "temporal_type": "DYNAMIC",
+      "has_unsolved_reference": false,
+      "valid_at": "2023-09-04T18:00:00",
+      "invalid_at": "NULL"
     },
     {
-      "statement": "用户 really likes roses and lilies.",
-      "statement_type": "FACT",
-      "temporal_type": "STATIC",
-      "relevance": "RELEVANT"
+      "statement_id": "stmt_i9j0k1l2",
+      "statement_text": "Professor Li explains things clearly.",
+      "statement_type": "OPINION",
+      "temporal_type": "ATEMPORAL",
+      "has_unsolved_reference": false,
+      "valid_at": "NULL",
+      "invalid_at": "NULL"
+    },
+    {
+      "statement_id": "stmt_m1n2o3p4",
+      "statement_text": "Professor Li's presence is intimidating.",
+      "statement_type": "OPINION",
+      "temporal_type": "ATEMPORAL",
+      "has_unsolved_reference": false,
+      "valid_at": "NULL",
+      "invalid_at": "NULL"
     }
   ]
 }
 
-Example 2: Chinese Conversation (中文对话示例)
-Example Chunk: """
-日期: 2024年3月15日
-参与者:
-- 张曼婷 (用户)
-- 小助手 (AI助手)
-
-用户: "我最近在尝试水彩画，画了一些花朵。"
-AI: "水彩画很有趣！水彩颜料通常由颜料和阿拉伯树胶等粘合剂混合而成。你觉得怎么样？"
-用户: "我觉得色彩搭配还有提升的空间，不过我很喜欢玫瑰和百合这两种花。"
-"""
+Example 2:
+Example Input: {
+  "chunk_id": "chunk_b2c3d4e5",
+  "end_user_id": "eu_12345678",
+  "target_content": "I've been learning Python recently, and I practice for an hour every night. This week I also plan to review basic syntax and functions first.",
+  "target_message_date": "2026-04-01T00:00:00",
+  "supporting_context": {
+    "msgs": [
+      {
+        "role": "User",
+        "msg": "I've been learning Python recently."
+      },
+      {
+        "role": "Assistant",
+        "msg": "Python is a very practical language."
+      }
+    ]
+  }
+}
 
 Example Output: {
   "statements": [
     {
-      "statement": "用户最近在尝试水彩画。",
+      "statement_id": "stmt_m3n4o5p6",
+      "statement_text": "The user has been learning Python recently.",
       "statement_type": "FACT",
       "temporal_type": "DYNAMIC",
-      "relevance": "RELEVANT"
+      "has_unsolved_reference": false,
+      "valid_at": "2026-04-01T00:00:00",
+      "invalid_at": "NULL"
     },
     {
-      "statement": "用户画了一些花朵。",
+      "statement_id": "stmt_q7r8s9t0",
+      "statement_text": "The user has recently been practicing Python for an hour every night.",
       "statement_type": "FACT",
       "temporal_type": "DYNAMIC",
-      "relevance": "RELEVANT"
+      "has_unsolved_reference": false,
+      "valid_at": "2026-04-01T00:00:00",
+      "invalid_at": "NULL"
     },
     {
-      "statement": "水彩颜料通常由颜料和阿拉伯树胶等粘合剂混合而成。",
+      "statement_id": "stmt_u1v2w3x4",
+      "statement_text": "The user plans to review Python basic syntax and functions first this week.",
       "statement_type": "FACT",
-      "temporal_type": "ATEMPORAL",
-      "relevance": "IRRELEVANT"
-    },
+      "temporal_type": "DYNAMIC",
+      "has_unsolved_reference": false,
+      "valid_at": "2026-04-01T00:00:00",
+      "invalid_at": "NULL"
+    }
+  ]
+}
+
+Example 3:
+Example Input: {
+  "chunk_id": "chunk_c3d4e5f6",
+  "end_user_id": "eu_12345678",
+  "target_content": "The two things the teacher assigned this week seem hard to me, and even after looking at them for a long time last night I still didn't really understand them. If I still can't finish them by the weekend, I may have to ask the TA.",
+  "target_message_date": "2026-04-01T00:00:00",
+  "supporting_context": {
+    "msgs": [
+      {
+        "role": "User",
+        "msg": "The two things the teacher assigned this week seem hard to me, and even after looking at them for a long time last night I still didn't really understand them. If I still can't finish them by the weekend, I may have to ask the TA."
+      },
+      {
+        "role": "Assistant",
+        "msg": "It sounds like you're stuck on the two things assigned this week, and asking the TA would make sense if there is still no progress by the weekend."
+      }
+    ]
+  }
+}
+
+Example Output: {
+  "statements": [
     {
-      "statement": "用户觉得水彩画的色彩搭配还有提升的空间。",
+      "statement_id": "stmt_y5z6a7b8",
+      "statement_text": "The user thinks those two things are difficult.",
       "statement_type": "OPINION",
-      "temporal_type": "STATIC",
-      "relevance": "RELEVANT"
+      "temporal_type": "DYNAMIC",
+      "has_unsolved_reference": true,
+      "valid_at": "2026-04-01T00:00:00",
+      "invalid_at": "NULL"
     },
     {
-      "statement": "用户很喜欢玫瑰和百合。",
+      "statement_id": "stmt_c9d0e1f2",
+      "statement_text": "The user spent a long time last night looking at those two things but still did not really understand them.",
       "statement_type": "FACT",
-      "temporal_type": "STATIC",
-      "relevance": "RELEVANT"
+      "temporal_type": "DYNAMIC",
+      "has_unsolved_reference": true,
+      "valid_at": "2026-03-31T00:00:00",
+      "invalid_at": "2026-03-31T23:59:59"
+    },
+    {
+      "statement_id": "stmt_g3h4i5j6",
+      "statement_text": "If the user still cannot finish them by the weekend, the user may ask the TA.",
+      "statement_type": "OTHER",
+      "temporal_type": "DYNAMIC",
+      "has_unsolved_reference": true,
+      "valid_at": "2026-04-01T00:00:00",
+      "invalid_at": "NULL"
     }
   ]
 }
@@ -317,77 +507,68 @@ Example Output: {
 ===End of Examples===
 
 {% if language == "zh" %}
-===反思过程===
+最终输出前检查：
 
-提取陈述句后，执行以下自我审查步骤：
-
-**步骤 1: 归属检查**
-- 确认每个陈述句都正确归属于正确的说话者
-- 验证说话者名称在整个过程中使用一致
-- 检查 AI 助手陈述句是否正确归属
-
-**步骤 2: 完整性审查**
-- 确保没有遗漏重要的陈述句
-- 检查时间信息是否保留
-
-**步骤 3: 分类验证**
-- 审查 statement_type 分类（FACT/OPINION/PREDICTION/SUGGESTION）
-- 验证 temporal_type 分配（STATIC/DYNAMIC/ATEMPORAL）
-- 确保分类与提供的定义一致
-
-**步骤 4: 最终质量检查**
-- 删除任何问题、命令或对话填充词
-- 验证 JSON 格式合规性
-- 确认输出语言与输入语言匹配
-{% else %}
-===Reflection Process===
-
-After extracting statements, perform the following self-review steps:
-
-**Step 1: Attribution Check**
-- Confirm every statement is properly attributed to the correct speaker
-- Verify speaker names are used consistently throughout
-- Check that AI assistant statements are properly attributed
-
-**Step 2: Completeness Review**
-- Ensure no important declarative statements were missed
-- Check that temporal information is preserved
-
-**Step 3: Classification Validation**
-- Review statement_type classifications (FACT/OPINION/PREDICTION/SUGGESTION)
-- Verify temporal_type assignments (STATIC/DYNAMIC/ATEMPORAL)
-- Ensure classifications align with the provided definitions
-
-**Step 4: Final Quality Check**
-- Remove any questions, commands, or conversational filler
-- Verify JSON format compliance
-- Confirm output language matches input language
-{% endif %}
+- 是否只保留 `target_content` 中可直接支持的陈述句
+- 如果主语是用户，是否统一写“用户”
+- 非用户主体是否尽量写成具体名称；若无法做到，是否已正确标记 `has_unsolved_reference = true`
+- statement_type 是否合法，且没有把一般事实机械标成 `OPINION`
+- temporal_type 是否与 valid_at / invalid_at 一致
+- 输出是否严格符合 JSON schema
+  {% else %}
+  Final checks before output:
+- Keep only statements directly supported by `target_content`
+- If the subject is the user, render it as “the user”
+- Render non-user subjects as concrete names when possible; otherwise mark `has_unsolved_reference = true`
+- Ensure statement_type is valid and do not mechanically label ordinary facts as `OPINION`
+- Ensure temporal_type is consistent with valid_at and invalid_at
+- Ensure the output strictly matches the JSON schema
+  {% endif %}
 
 **Output format**
 **CRITICAL JSON FORMATTING REQUIREMENTS:**
-1. Use only standard ASCII double quotes (") for JSON structure - never use Chinese quotation marks ("") or other Unicode quotes
-2. If the extracted statement text contains quotation marks, escape them properly using backslashes (\")
-3. Ensure all JSON strings are properly closed and comma-separated
-4. Do not include line breaks within JSON string values
-5. Example of proper escaping: "statement": "John said: \"I really like this book.\""
+
+1. Use only standard ASCII double quotes (") for JSON structure.
+2. Escape internal quotation marks inside string values using backslashes (\").
+3. Ensure all JSON strings are properly closed and comma-separated.
+4. Do not include line breaks within JSON string values.
+5. Return only the JSON object. Do not add explanations before or after it.
+
+**ISO 8601 HARD CONSTRAINT:**
+
+- `target_message_date` must be ISO 8601.
+- `valid_at` and `invalid_at` must be ISO 8601, or `"NULL"` when no time is available.
+- Do not output non-ISO values such as `2026/04/01`, `2026-04-01 00:00:00`, `yesterday evening`, or `下周三`.
+- When only a date is known, still output an ISO 8601 datetime boundary.
 
 **LANGUAGE REQUIREMENT:**
 {% if language == "zh" %}
-- 输出语言应始终与输入语言匹配
-- 如果输入是中文，则用中文提取陈述句
-- 如果输入是英文，则用英文提取陈述句
-- 保留原始语言，不要翻译
-{% else %}
-- The output language should ALWAYS match the input language
-- If input is in English, extract statements in English
-- If input is in Chinese, extract statements in Chinese
-- Preserve the original language and do not translate
-{% endif %}
 
-{% if language == "zh" %}
-仅返回与以下架构匹配的 JSON 对象数组中提取的标记陈述句列表：
-{% else %}
-Return only a list of extracted labelled statements in the JSON ARRAY of objects that match the schema below:
-{% endif %}
-{{ json_schema }}
+- 输出语言应始终与输入语言匹配。
+- 如果输入是中文，则用中文提取陈述句。
+- 如果输入是英文，则用英文提取陈述句。
+- 保留原始语言，不要翻译。
+  {% else %}
+- The output language must always match the input language.
+- If the input is in Chinese, extract statements in Chinese.
+- If the input is in English, extract statements in English.
+- Preserve the original language and do not translate.
+  {% endif %}
+
+现在处理下面这个输入：
+{{ render_input() }}
+
+Return only a JSON object matching the schema below:
+{
+  "statements": [
+    {
+      "statement_id": "string",
+      "statement_text": "string",
+      "statement_type": "FACT | OPINION | OTHER",
+      "temporal_type": "STATIC | DYNAMIC | ATEMPORAL",
+      "has_unsolved_reference": "boolean",
+      "valid_at": "string | NULL",
+      "invalid_at": "string | NULL"
+    }
+  ]
+}

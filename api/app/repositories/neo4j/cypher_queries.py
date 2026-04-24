@@ -46,6 +46,15 @@ SET s += {
 RETURN s.id AS uuid
 """
 
+STATEMENT_EMOTION_UPDATE = """
+UNWIND $items AS item
+MATCH (s:Statement {id: item.statement_id})
+SET s.emotion_type = item.emotion_type,
+    s.emotion_intensity = item.emotion_intensity,
+    s.emotion_keywords = item.emotion_keywords
+RETURN s.id AS uuid
+"""
+
 CHUNK_NODE_SAVE = """
 UNWIND $chunks AS chunk
 MERGE (c:Chunk {id: chunk.id})

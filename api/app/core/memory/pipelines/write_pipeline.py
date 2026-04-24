@@ -219,6 +219,9 @@ class WritePipeline:
                 f"✔ {time.time() - step_start:.2f}s"
             )
 
+            # Step 3.5: 异步情绪提取（fire-and-forget，需在 _store 之后确保 Statement 节点已存在）
+            self._extract_emotion(getattr(self, "_emotion_statements", []))
+
             # Step 4: 聚类 - 增量更新社区（异步，不阻塞）
             step_start = time.time()
             await self._cluster(extraction_result)
@@ -333,6 +336,10 @@ class WritePipeline:
         )
         # step1: 执行知识提取
         dialog_data_list = await new_orchestrator.run(chunked_dialogs)
+
+        # 收集需要异步情绪提取的 statements（由编排器在 Phase 4 后收集）
+        # 注意：实际 dispatch 在 _store 之后，确保 Statement 节点已写入 Neo4j
+        self._emotion_statements = new_orchestrator.emotion_statements
 
         # ── Snapshot: 各阶段萃取结果 ── TODO 乐力齐 重构流水线切换生产环境稳定后修改
         stage_outputs = new_orchestrator.last_stage_outputs
@@ -577,6 +584,51 @@ class WritePipeline:
                 exc_info=True,
             )
 
+    # ──────────────────────────────────────────────
+    # Step 4.5: 异步情绪提取
+    #    fire-and-forget 提交 Celery 任务，不阻塞主流程
+    # ──────────────────────────────────────────────
+
+    def _extract_emotion(self, emotion_statements: list) -> None:
+        """提交异步情绪提取 Celery 任务。
+
+        从编排器收集的 user statement 列表中提取情绪，
+        异步回写到 Neo4j Statement 节点。失败不影响主流程。
+        """
+        if not emotion_statements:
+            return
+
+        llm_model_id = (
+            str(self.memory_config.llm_model_id)
+            if self.memory_config.llm_model_id
+            else None
+        )
+        if not llm_model_id:
+            logger.warning("[Emotion] 无法提交情绪提取任务：llm_model_id 为空")
+            return
+
+        try:
+            from app.celery_app import celery_app
+
+            result = celery_app.send_task(
+                "app.tasks.extract_emotion_batch",
+                kwargs={
+                    "statements": emotion_statements,
+                    "llm_model_id": llm_model_id,
+                    "language": self.language,
+                },
+            )
+            logger.info(
+                f"[Emotion] 异步情绪提取任务已提交 - "
+                f"task_id={result.id}, "
+                f"statement_count={len(emotion_statements)}, "
+                f"source=async"
+            )
+        except Exception as e:
+            logger.error(
+                f"[Emotion] 提交情绪提取任务失败（不影响主流程）: {e}",
+                exc_info=True,
+            )
     # ──────────────────────────────────────────────
     # Step 5: 摘要
     # （+ entity_description）+ meta_data部分在此提取

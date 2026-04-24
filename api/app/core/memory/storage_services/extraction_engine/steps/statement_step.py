@@ -9,7 +9,7 @@ import logging
 import uuid
 from typing import Any, List
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from app.core.memory.utils.data.ontology import LABEL_DEFINITIONS
 from app.core.memory.utils.prompt.prompt_utils import render_statement_extraction_prompt
@@ -26,12 +26,17 @@ logger = logging.getLogger(__name__)
 class _ExtractedStatement(BaseModel):
     """Raw statement returned by the LLM (before enrichment)."""
 
-    statement: str = Field(..., description="The extracted statement text")
-    statement_type: str = Field(..., description="FACT / OPINION / SUGGESTION / PREDICTION")
+    statement: str = Field(
+        ...,
+        validation_alias=AliasChoices("statement", "statement_text"),
+        description="The extracted statement text",
+    )
+    statement_type: str = Field(..., description="FACT / OPINION / OTHER")
     temporal_type: str = Field(..., description="STATIC / DYNAMIC / ATEMPORAL")
-    relevance: str = Field("RELEVANT", description="RELEVANT / IRRELEVANT")
+    # relevance: str = Field("RELEVANT", description="RELEVANT / IRRELEVANT")
     valid_at: str = Field("NULL", description="ISO 8601 or NULL")
     invalid_at: str = Field("NULL", description="ISO 8601 or NULL")
+    has_unsolved_reference: bool = Field(False, description="Whether the statement has unresolved references")
 
 
 class _StatementExtractionResponse(BaseModel):
@@ -44,7 +49,12 @@ class _StatementExtractionResponse(BaseModel):
     def filter_empty(cls, v: Any) -> Any:
         """Drop empty / malformed dicts that the LLM occasionally produces."""
         if isinstance(v, list):
-            return [s for s in v if isinstance(s, dict) and s.get("statement")]
+            return [
+                s
+                for s in v
+                if isinstance(s, dict)
+                and (s.get("statement") or s.get("statement_text"))
+            ]
         return v
 
 
@@ -89,6 +99,19 @@ class StatementExtractionStep(ExtractionStep[StatementStepInput, List[StatementS
                 f"{m.role}: {m.msg}" for m in input_data.supporting_context.msgs
             )
 
+        input_json = {
+            "chunk_id": input_data.chunk_id,
+            "end_user_id": input_data.end_user_id,
+            "target_content": input_data.target_content,
+            "target_message_date": input_data.target_message_date,
+            "supporting_context": {
+                "msgs": [
+                    {"role": m.role, "msg": m.msg}
+                    for m in input_data.supporting_context.msgs
+                ]
+            },
+        }
+
         return await render_statement_extraction_prompt(
             chunk_content=input_data.target_content,
             definitions=self.definitions,
@@ -98,6 +121,7 @@ class StatementExtractionStep(ExtractionStep[StatementStepInput, List[StatementS
             dialogue_content=dialogue_content,
             max_dialogue_chars=self.max_dialogue_context_chars,
             language=self.language,
+            input_json=input_json,
         )
 
     async def call_llm(self, prompt: Any) -> Any:
@@ -129,10 +153,11 @@ class StatementExtractionStep(ExtractionStep[StatementStepInput, List[StatementS
                     statement_text=stmt.statement,
                     statement_type=stmt.statement_type.strip().upper(),
                     temporal_type=stmt.temporal_type.strip().upper(),
-                    relevance=stmt.relevance.strip().upper(),
+                    # relevance=stmt.relevance.strip().upper(),
                     speaker="user",  # default; orchestrator overrides from chunk metadata
                     valid_at=stmt.valid_at or "NULL",
                     invalid_at=stmt.invalid_at or "NULL",
+                    has_unsolved_reference=getattr(stmt, "has_unsolved_reference", False),
                 )
             )
         return results

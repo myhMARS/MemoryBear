@@ -22,6 +22,7 @@ class ExtractedStatement(BaseModel):
     statement_type: str = Field(..., description="FACT, OPINION, SUGGESTION or PREDICTION")
     temporal_type: str = Field(..., description="STATIC, DYNAMIC, ATEMPORAL")
     relevence: str = Field(..., description="RELEVANT or IRRELEVANT")
+    has_unsolved_reference: bool = Field(False, description="Whether the statement has unresolved references")
 
 class StatementExtractionResponse(BaseModel):
     statements: List[ExtractedStatement] = Field(default_factory=list, description="List of extracted statements")
@@ -159,6 +160,7 @@ class StatementExtractor:
                     chunk_id=chunk.id,
                     end_user_id=end_user_id,
                     speaker=chunk_speaker,
+                    has_unsolved_reference=getattr(extracted_stmt, "has_unsolved_reference", False),
                 )
                 
                 chunk_statements.append(chunk_statement)

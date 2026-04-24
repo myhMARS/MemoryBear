@@ -225,6 +225,7 @@ class NewExtractionOrchestrator:
             speaker=stmt_out.speaker,
             valid_at=stmt_out.valid_at,
             invalid_at=stmt_out.invalid_at,
+            has_unsolved_reference=stmt_out.has_unsolved_reference,
         )
 
     @staticmethod
@@ -346,7 +347,7 @@ class NewExtractionOrchestrator:
             dialog_data_list, all_stmt_results
         )
 
-        # Build sidecar inputs for after_statement sidecars (e.g. emotion)
+        # Build sidecar inputs for after_statement sidecars (emotion excluded — async Celery)
         sidecar_pairs = self._build_after_statement_sidecar_inputs(
             dialog_data_list, all_stmt_results
         )
@@ -403,21 +404,25 @@ class NewExtractionOrchestrator:
 
         # ── Phase 4: Data assignment ──
         logger.info("Phase 4/4: Data assignment")
-        emotion_results = sidecar_output_map.get("emotion_extraction", {})
 
         self._assign_results(
             dialog_data_list,
             all_stmt_results,
             all_triplet_results,
-            emotion_results=emotion_results,
+            emotion_results={},
             embedding_output=merged_emb,
         )
+
+        # ── Fire-and-forget: collect statements for async emotion extraction ──
+        self._emotion_statements: List[Dict[str, str]] = []
+        if self.config.emotion_enabled:
+            self._emotion_statements = self._collect_emotion_statements(all_stmt_results)
 
         # Store raw step outputs for snapshot/debugging
         self._last_stage_outputs = {
             "statement_results": all_stmt_results,
             "triplet_results": all_triplet_results,
-            "emotion_results": emotion_results,
+            "emotion_results": {},
             "embedding_output": merged_emb,
         }
 
@@ -611,8 +616,7 @@ class NewExtractionOrchestrator:
     ) -> List[Tuple[ExtractionStep, Any]]:
         """Build (step, input) pairs for after_statement sidecars.
 
-        For emotion extraction, we create a batch wrapper that runs the sidecar
-        on every user statement concurrently and returns a dict of results.
+        Emotion extraction is excluded here — it runs asynchronously via Celery.
         """
         if not self.after_statement_sidecars:
             return []
@@ -628,21 +632,12 @@ class NewExtractionOrchestrator:
         pairs: List[Tuple[ExtractionStep, Any]] = []
         for sidecar in self.after_statement_sidecars:
             if sidecar.name == "emotion_extraction":
-                # Emotion sidecar: wrap as batch coroutine via a sentinel input
-                # The actual per-statement calls happen inside _run_emotion_batch
-                pairs.append((
-                    _EmotionBatchWrapper(sidecar, all_user_stmts),
-                    EmotionStepInput(
-                        statement_id="__batch__",
-                        statement_text="",
-                        speaker="",
-                    ),
-                ))
-            else:
-                # Generic sidecar: pass first statement as representative input
-                if all_user_stmts:
-                    inp = self._convert_to_emotion_input(all_user_stmts[0])
-                    pairs.append((sidecar, inp))
+                # Skip — emotion is dispatched as async Celery task after Phase 4
+                continue
+            # Generic sidecar: pass first statement as representative input
+            if all_user_stmts:
+                inp = self._convert_to_emotion_input(all_user_stmts[0])
+                pairs.append((sidecar, inp))
 
         return pairs
 
@@ -676,10 +671,40 @@ class NewExtractionOrchestrator:
         return merged
 
     # ──────────────────────────────────────────────
+    # 6.5 异步情绪提取调度
+    #     收集 user statement，fire-and-forget 发送 Celery task
+    # ──────────────────────────────────────────────
+
+    def _collect_emotion_statements(
+        self,
+        all_stmt_results: Dict[str, Dict[str, List[StatementStepOutput]]],
+    ) -> List[Dict[str, str]]:
+        """Collect user statements for async emotion extraction.
+
+        Returns a list of dicts ready to be sent as Celery task payload.
+        """
+        statements_payload: List[Dict[str, str]] = []
+        for _dialog_id, chunk_stmts in all_stmt_results.items():
+            for _chunk_id, stmts in chunk_stmts.items():
+                for s in stmts:
+                    if s.speaker == "user":
+                        statements_payload.append({
+                            "statement_id": s.statement_id,
+                            "statement_text": s.statement_text,
+                            "speaker": s.speaker,
+                        })
+        return statements_payload
+
+    @property
+    def emotion_statements(self) -> List[Dict[str, str]]:
+        """Statements collected for async emotion extraction after last run."""
+        return getattr(self, "_emotion_statements", [])
+
+    # ──────────────────────────────────────────────
     # 7. 数据赋值
     #    将各阶段 StepOutput 组装为 Statement 对象，替换 chunk.statements
     # ──────────────────────────────────────────────
-
+    # TODO 乐力齐 函数内容密集较长，需要优化
     def _assign_results(
         self,
         dialog_data_list: List[DialogData],
@@ -815,7 +840,7 @@ class NewExtractionOrchestrator:
                         speaker=stmt_out.speaker,
                         stmt_type=_STMT_TYPE_MAP.get(stmt_out.statement_type, StatementType.FACT),
                         temporal_info=_TEMPORAL_MAP.get(stmt_out.temporal_type, TemporalInfo.ATEMPORAL),
-                        relevence_info=RelevenceInfo.RELEVANT if stmt_out.relevance == "RELEVANT" else RelevenceInfo.IRRELEVANT,
+                        # relevence_info=RelevenceInfo.RELEVANT if stmt_out.relevance == "RELEVANT" else RelevenceInfo.IRRELEVANT,
                         temporal_validity=TemporalValidityRange(valid_at=valid_at, invalid_at=invalid_at),
                         triplet_extraction_info=triplet_info,
                         statement_embedding=stmt_embedding,
@@ -836,71 +861,3 @@ class NewExtractionOrchestrator:
             assigned_chunk_emb,
             assigned_dialog_emb,
         )
-
-
-class _EmotionBatchWrapper(ExtractionStep):
-    """情绪批量提取包装器。再考虑一下用法，这是子类？
-
-    将单条情绪旁路 Step 包装为批量并发执行，适配 ``_run_with_sidecars`` 接口。
-    编排器传入一个 sentinel input，``run()`` 忽略它，转而对预收集的 statement 列表
-    逐条并发调用内部 Step，返回 ``{statement_id: EmotionStepOutput}`` 字典。
-    """
-
-    # ── 初始化 ──
-
-    def __init__(
-        self,
-        inner_step: ExtractionStep,
-        statements: List[StatementStepOutput],
-    ) -> None:
-        # 不调用 super().__init__() — 本类是薄包装，不需要 StepContext
-        self._inner = inner_step
-        self._statements = statements
-
-    # ── Step 身份属性（满足 ExtractionStep 抽象接口） ──
-
-    @property
-    def name(self) -> str:
-        return self._inner.name
-
-    @property
-    def is_critical(self) -> bool:
-        return False
-
-    def get_default_output(self) -> Dict[str, EmotionStepOutput]:
-        return {}
-
-    # ── 未使用的生命周期方法（批量包装器不走 render→call→parse 流程） ──
-
-    async def render_prompt(self, input_data: Any) -> Any:
-        raise NotImplementedError
-
-    async def call_llm(self, prompt: Any) -> Any:
-        raise NotImplementedError
-
-    async def parse_response(self, raw_response: Any, input_data: Any) -> Any:
-        raise NotImplementedError
-
-    # ── 批量执行入口 ──
-
-    async def run(self, input_data: Any) -> Dict[str, EmotionStepOutput]:
-        """对所有预收集的 statement 并发执行情绪提取，单条失败返回默认值。"""
-        if not self._statements:
-            return {}
-
-        async def _extract_one(stmt: StatementStepOutput) -> Tuple[str, EmotionStepOutput]:
-            inp = EmotionStepInput(
-                statement_id=stmt.statement_id,
-                statement_text=stmt.statement_text,
-                speaker=stmt.speaker,
-            )
-            try:
-                result = await self._inner.run(inp)
-                return stmt.statement_id, result
-            except Exception:
-                return stmt.statement_id, self._inner.get_default_output()
-
-        pairs = await asyncio.gather(
-            *[_extract_one(s) for s in self._statements]
-        )
-        return dict(pairs)

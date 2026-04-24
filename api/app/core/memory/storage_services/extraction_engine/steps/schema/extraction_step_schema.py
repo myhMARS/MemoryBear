@@ -44,10 +44,11 @@ class StatementStepOutput(BaseModel):
     statement_text: str
     statement_type: str   # FACT / OPINION / PREDICTION / SUGGESTION
     temporal_type: str    # STATIC / DYNAMIC / ATEMPORAL
-    relevance: str        # RELEVANT / IRRELEVANT
+    # relevance: str        # RELEVANT / IRRELEVANT
     speaker: str          # "user" / "assistant"
     valid_at: str         # ISO 8601 or "NULL"
     invalid_at: str       # ISO 8601 or "NULL"
+    has_unsolved_reference: bool = False  # Whether the statement has unresolved references
 
 
 # ── Triplet extraction ──
@@ -62,6 +63,7 @@ class TripletStepInput(BaseModel):
     speaker: str
     valid_at: str
     invalid_at: str
+    has_unsolved_reference: bool = False  # From upstream statement extraction
 
 
 class EntityItem(BaseModel):

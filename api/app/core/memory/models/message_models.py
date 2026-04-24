@@ -94,6 +94,8 @@ class Statement(BaseModel):
     emotion_keywords: Optional[List[str]] = Field(default_factory=list, description="Emotion keywords, max 3")
     emotion_subject: Optional[str] = Field(None, description="Emotion subject: self/other/object")
     emotion_target: Optional[str] = Field(None, description="Emotion target: person or object name")
+    # Reference resolution
+    has_unsolved_reference: bool = Field(False, description="Whether the statement has unresolved references")
 
 
 class ConversationContext(BaseModel):
