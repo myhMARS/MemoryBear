@@ -945,44 +945,7 @@ class WorkflowService:
                 event_type = event.get("event")
                 event_data = event.get("data", {})
 
-                # 持久化节点执行记录
-                if event_type == "node_end":
-                    node_id = event_data.get("node_id")
-                    node_cfg = next((n for n in config.nodes if n.get("id") == node_id), {})
-                    self.db.add(WorkflowNodeExecution(
-                        execution_id=execution.id,
-                        node_id=node_id,
-                        node_type=node_cfg.get("type", "unknown"),
-                        node_name=node_cfg.get("data", {}).get("label") or node_id,
-                        execution_order=_node_order_counter,
-                        status="completed",
-                        input_data=event_data.get("input"),
-                        output_data=event_data.get("output"),
-                        elapsed_time=event_data.get("elapsed_time"),
-                        token_usage=event_data.get("token_usage"),
-                    ))
-                    self.db.commit()
-                    _node_order_counter += 1
-
-                elif event_type == "node_error":
-                    node_id = event_data.get("node_id")
-                    node_cfg = next((n for n in config.nodes if n.get("id") == node_id), {})
-                    self.db.add(WorkflowNodeExecution(
-                        execution_id=execution.id,
-                        node_id=node_id,
-                        node_type=node_cfg.get("type", "unknown"),
-                        node_name=node_cfg.get("data", {}).get("label") or node_id,
-                        execution_order=_node_order_counter,
-                        status="failed",
-                        input_data=event_data.get("input"),
-                        output_data=None,
-                        error_message=event_data.get("error"),
-                        elapsed_time=event_data.get("elapsed_time"),
-                    ))
-                    self.db.commit()
-                    _node_order_counter += 1
-
-                elif event_type == "cycle_item":
+                if event_type == "cycle_item":
                     cycle_id = event_data.get("cycle_id")
                     if cycle_id not in _cycle_items:
                         _cycle_items[cycle_id] = []
