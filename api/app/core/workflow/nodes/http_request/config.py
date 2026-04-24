@@ -272,6 +272,11 @@ class HttpRequestNodeOutput(BaseModel):
         description="HTTP response body",
     )
 
+    process_data: dict = Field(
+        default_factory=dict,
+        description="Raw HTTP request details for debugging",
+    )
+
     # files: list[File] = Field(
     #     ...
     # )
