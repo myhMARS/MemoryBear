@@ -1298,3 +1298,46 @@ async def import_app(
         data={"app": app_schema.App.model_validate(result_app), "warnings": warnings},
         msg="应用导入成功" + ("，但部分资源需手动配置" if warnings else "")
     )
+
+
+@router.get("/citations/{document_id}/download", summary="下载引用文档原始文件")
+async def download_citation_file(
+        document_id: uuid.UUID = Path(..., description="引用文档ID"),
+        db: Session = Depends(get_db),
+):
+    """
+    下载引用文档的原始文件。
+    仅当应用功能特性 citation.allow_download=true 时，前端才会展示此下载链接。
+    路由本身不做权限校验，由业务层通过 allow_download 开关控制入口。
+    """
+    import os
+    from fastapi import HTTPException, status as http_status
+    from fastapi.responses import FileResponse
+    from app.core.config import settings
+    from app.models.document_model import Document
+    from app.models.file_model import File as FileModel
+
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="文档不存在")
+
+    file_record = db.query(FileModel).filter(FileModel.id == doc.file_id).first()
+    if not file_record:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="原始文件不存在")
+
+    file_path = os.path.join(
+        settings.FILE_PATH,
+        str(file_record.kb_id),
+        str(file_record.parent_id),
+        f"{file_record.id}{file_record.file_ext}"
+    )
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="文件未找到")
+
+    encoded_name = quote(doc.file_name)
+    return FileResponse(
+        path=file_path,
+        filename=doc.file_name,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}"}
+    )

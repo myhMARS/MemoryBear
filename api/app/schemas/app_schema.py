@@ -200,6 +200,7 @@ class TextToSpeechConfig(BaseModel):
 class CitationConfig(BaseModel):
     """引用和归属配置"""
     enabled: bool = Field(default=False)
+    allow_download: bool = Field(default=False, description="是否允许下载引用文档")
 
 
 class Citation(BaseModel):
@@ -207,6 +208,7 @@ class Citation(BaseModel):
     file_name: str
     knowledge_id: str
     score: float
+    download_url: Optional[str] = Field(default=None, description="引用文档下载链接（allow_download 开启时返回）")
 
 
 class WebSearchConfig(BaseModel):
@@ -657,7 +659,7 @@ class DraftRunResponse(BaseModel):
     usage: Optional[Dict[str, Any]] = Field(default=None, description="Token 使用情况")
     elapsed_time: Optional[float] = Field(default=None, description="耗时（秒）")
     suggested_questions: List[str] = Field(default_factory=list, description="下一步建议问题")
-    citations: List[CitationSource] = Field(default_factory=list, description="引用来源")
+    citations: List[Dict[str, Any]] = Field(default_factory=list, description="引用来源")
     audio_url: Optional[str] = Field(default=None, description="TTS 语音URL")
 
     def model_dump(self, **kwargs):

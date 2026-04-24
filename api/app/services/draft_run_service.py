@@ -475,11 +475,19 @@ class AgentRunService:
             features_config: Dict[str, Any],
             citations: List[Citation]
     ) -> List[Any]:
-        """根据 citation 开关决定是否返回引用来源"""
+        """根据 citation 开关决定是否返回引用来源，并根据 allow_download 附加下载链接"""
         citation_cfg = features_config.get("citation", {})
-        if isinstance(citation_cfg, dict) and citation_cfg.get("enabled"):
-            return [cit.model_dump() for cit in citations]
-        return []
+        if not (isinstance(citation_cfg, dict) and citation_cfg.get("enabled")):
+            return []
+        allow_download = citation_cfg.get("allow_download", False)
+        result = []
+        for cit in citations:
+            item = cit.model_dump() if hasattr(cit, "model_dump") else dict(cit)
+            if allow_download and item.get("document_id"):
+                from app.core.config import settings
+                item["download_url"] = f"{settings.FILE_LOCAL_SERVER_URL}/apps/citations/{item['document_id']}/download"
+            result.append(item)
+        return result
 
     async def run(
             self,
