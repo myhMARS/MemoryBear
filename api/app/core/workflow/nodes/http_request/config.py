@@ -132,11 +132,6 @@ class HttpErrorDefaultTemplate(BaseModel):
         description="Default HTTP headers returned on error",
     )
 
-    files: list = Field(
-        default_factory=list,
-        description="Default files list returned on error",
-    )
-
     output: str = Field(
         default="SUCCESS",
         description="HTTP response body",
@@ -249,13 +244,6 @@ class HttpRequestNodeConfig(BaseNodeConfig):
                 }
             ]
         }
-
-
-class HttpRequestDataProcessing(BaseModel):
-    request: str = Field(
-        default="",
-        description="Raw HTTP request format for debugging",
-    )
 
 
 class HttpRequestNodeOutput(BaseModel):
