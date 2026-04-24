@@ -910,7 +910,6 @@ class WorkflowService:
                 input_data["conv_messages"] = conv_messages
             init_message_length = len(input_data.get("conv_messages", []))
             message_id = uuid.uuid4()
-            _node_order_counter = 0
             _cycle_items: dict[str, list] = {}
 
             # 新会话时写入开场白
@@ -1015,32 +1014,17 @@ class WorkflowService:
                         )
                     else:
                         logger.error(f"unexpect workflow run status, status: {status}")
-                    # 把积累的 cycle_item 写入对应循环节点的 output_data
-                    if _cycle_items:
+                    # 把积累的 cycle_item 写入 workflow_executions.output_data["node_outputs"]
+                    if _cycle_items and execution.output_data:
+                        import copy
+                        new_output_data = copy.deepcopy(execution.output_data)
+                        node_outputs = new_output_data.setdefault("node_outputs", {})
                         for cycle_node_id, items in _cycle_items.items():
-                            node_exec = self.db.execute(
-                                select(WorkflowNodeExecution).where(
-                                    WorkflowNodeExecution.execution_id == execution.id,
-                                    WorkflowNodeExecution.node_id == cycle_node_id
-                                )
-                            ).scalar_one_or_none()
-                            if node_exec:
-                                node_exec.output_data = {
-                                    **(node_exec.output_data or {}),
-                                    "cycle_items": items
-                                }
+                            if cycle_node_id in node_outputs:
+                                node_outputs[cycle_node_id]["cycle_items"] = items
                             else:
-                                node_cfg = next((n for n in config.nodes if n.get("id") == cycle_node_id), {})
-                                self.db.add(WorkflowNodeExecution(
-                                    execution_id=execution.id,
-                                    node_id=cycle_node_id,
-                                    node_type=node_cfg.get("type", "cycle"),
-                                    node_name=node_cfg.get("data", {}).get("label") or cycle_node_id,
-                                    execution_order=_node_order_counter,
-                                    status="completed",
-                                    output_data={"cycle_items": items},
-                                ))
-                                _node_order_counter += 1
+                                node_outputs[cycle_node_id] = {"cycle_items": items}
+                        execution.output_data = new_output_data
                         self.db.commit()
                 elif event.get("event") == "workflow_start":
                     event["data"]["message_id"] = str(message_id)
