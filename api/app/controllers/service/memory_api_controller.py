@@ -18,6 +18,7 @@ from app.schemas.memory_api_schema import (
     MemoryWriteSyncResponse,
 )
 from app.services.memory_api_service import MemoryAPIService
+from celery_task_scheduler import scheduler
 
 router = APIRouter(prefix="/memory", tags=["V1 - Memory API"])
 logger = get_business_logger()
@@ -86,7 +87,7 @@ async def write_memory(
         user_rag_memory_id=payload.user_rag_memory_id,
     )
 
-    logger.info(f"Memory write task submitted: task_id={result['task_id']}, end_user_id: {payload.end_user_id}")
+    logger.info(f"Memory write task submitted: task_id: {result['task_id']} end_user_id: {payload.end_user_id}")
     return success(data=MemoryWriteResponse(**result).model_dump(), msg="Memory write task submitted")
 
 
@@ -105,8 +106,7 @@ async def get_write_task_status(
     """
     logger.info(f"Write task status check - task_id: {task_id}")
 
-    from app.services.task_service import get_task_memory_write_result
-    result = get_task_memory_write_result(task_id)
+    result = scheduler.get_task_status(task_id)
 
     return success(data=_sanitize_task_result(result), msg="Task status retrieved")
 
