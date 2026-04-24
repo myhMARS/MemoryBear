@@ -187,7 +187,7 @@ class MemoryAPIService:
             }
         )
 
-        logger.info(f"Memory write task submitted, end_user_id={end_user_id}")
+        logger.info(f"Memory write task submitted, task_id={task_id} end_user_id={end_user_id}")
 
         return {
             "task_id": task_id,
