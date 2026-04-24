@@ -19,6 +19,7 @@ from app.core.exceptions import (
 )
 from app.core.error_codes import BizCode
 from app.core.logging_config import get_business_logger
+from app.models.app_model import App
 
 logger = get_business_logger()
 
@@ -441,6 +442,17 @@ class ApiKeyAuthService:
             return None
 
         return api_key_obj
+
+    @staticmethod
+    def check_app_published(db: Session, api_key_obj: ApiKey) -> None:
+        """
+        检查应用是否已发布，未发布则抛出异常
+        """
+        if not api_key_obj.resource_id:
+            return
+        app = db.get(App, api_key_obj.resource_id)
+        if not app or not app.current_release_id:
+            raise BusinessException("应用未发布，不可用", BizCode.APP_NOT_PUBLISHED)
 
     @staticmethod
     def check_scope(api_key: ApiKey, required_scope: str) -> bool:

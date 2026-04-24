@@ -156,8 +156,13 @@ class DifyConverter(BaseConverter):
 
         def replacer(match: re.Match) -> str:
             raw_name = match.group(1)
-            new_name = self.process_var_selector(raw_name)
-            return f"{{{{{new_name}}}}}"
+            try:
+                new_name = self.process_var_selector(raw_name)
+                if not new_name:
+                    return match.group(0)
+                return f"{{{{{new_name}}}}}"
+            except Exception:
+                return match.group(0)
 
         return pattern.sub(replacer, content)
 
@@ -633,8 +638,15 @@ class DifyConverter(BaseConverter):
                 ] = self.trans_variable_format(content["value"])
         else:
             if node_data["body"]["data"]:
-                body_content = (node_data["body"]["data"][0].get("value") or
-                                self._process_list_variable_literal(node_data["body"]["data"][0].get("file")))
+                data_entry = node_data["body"]["data"][0]
+                body_content = data_entry.get("value")
+                if not body_content and data_entry.get("file"):
+                    body_content = self._process_list_variable_literal(data_entry.get("file"))
+                if not body_content:
+                    body_content = ""
+                elif isinstance(body_content, str):
+                    # Convert session variable format for JSON body
+                    body_content = self.trans_variable_format(body_content)
             else:
                 body_content = ""
 
