@@ -96,7 +96,7 @@ class ChatResponse(BaseModel):
     elapsed_time: Optional[float] = None
     reasoning_content: Optional[str] = None
     suggested_questions: Optional[List[str]] = None
-    citations: Optional[List[Any]] = None
+    citations: Optional[List[Dict[str, Any]]] = None
     audio_url: Optional[str] = None
     audio_status: Optional[str] = None
 
