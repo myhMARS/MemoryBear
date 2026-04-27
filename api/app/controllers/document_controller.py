@@ -20,6 +20,7 @@ from app.models.user_model import User
 from app.schemas import document_schema
 from app.schemas.response_schema import ApiResponse
 from app.services import document_service, file_service, knowledge_service
+from app.services.file_storage_service import FileStorageService, get_file_storage_service
 
 
 # Obtain a dedicated API logger
@@ -231,7 +232,8 @@ async def update_document(
 async def delete_document(
         document_id: uuid.UUID,
         db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user)
+        current_user: User = Depends(get_current_user),
+        storage_service: FileStorageService = Depends(get_file_storage_service),
 ):
     """
     Delete document
@@ -257,7 +259,7 @@ async def delete_document(
         db.commit()
 
         # 3. Delete file
-        await file_controller._delete_file(db=db, file_id=file_id, current_user=current_user)
+        await file_controller._delete_file(db=db, file_id=file_id, current_user=current_user, storage_service=storage_service)
 
         # 4. Delete vector index
         db_knowledge = knowledge_service.get_knowledge_by_id(db, knowledge_id=db_document.kb_id, current_user=current_user)
