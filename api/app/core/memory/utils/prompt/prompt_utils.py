@@ -65,7 +65,7 @@ async def render_statement_extraction_prompt(
     Returns:
         Rendered prompt content as string
     """
-    template = prompt_env.get_template("extract_statement.jinja2")
+    template = prompt_env.get_template("extract_statement_temporal.jinja2")
     # Optional clipping of dialogue context
     ctx = None
     if include_dialogue_context and dialogue_content:
@@ -90,7 +90,7 @@ async def render_statement_extraction_prompt(
     # 记录渲染结果到提示日志（与示例日志结构一致）
     log_prompt_rendering('statement extraction', rendered_prompt)
     # 可选：记录模板渲染信息
-    log_template_rendering('extract_statement.jinja2', {
+    log_template_rendering('extract_statement_temporal.jinja2', {
         'inputs': 'chunk',
         'definitions': 'LABEL_DEFINITIONS',
         'json_schema': 'StatementExtractionResponse.schema',

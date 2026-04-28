@@ -23,12 +23,12 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from app.core.memory.models.message_models import DialogData
 from app.core.memory.models.variate_config import ExtractionPipelineConfig
 
-from .base import ExtractionStep, StepContext
-from .embedding_step import EmbeddingStep
-from .sidecar_factory import SidecarStepFactory, SidecarTiming
-from .statement_step import StatementExtractionStep
-from .triplet_step import TripletExtractionStep
-from .schema import (
+from .steps.base import ExtractionStep, StepContext
+from .steps.embedding_step import EmbeddingStep
+from .steps.sidecar_factory import SidecarStepFactory, SidecarTiming
+from .steps.statement_temporal_step import StatementTemporalExtractionStep
+from .steps.triplet_step import TripletExtractionStep
+from .steps.schema import (
     EmbeddingStepInput,
     EmbeddingStepOutput,
     EmotionStepInput,
@@ -85,7 +85,7 @@ class NewExtractionOrchestrator:
         )
 
         # ── Critical (main-line) steps ──
-        self.statement_step = StatementExtractionStep(self.context)
+        self.statement_temporal_step = StatementTemporalExtractionStep(self.context)
         self.triplet_step = TripletExtractionStep(
             self.context, ontology_types=ontology_types
         )
@@ -508,7 +508,7 @@ class NewExtractionOrchestrator:
                     ),
                     supporting_context=ctx,
                 )
-                tasks.append(self.statement_step.run(inp))
+                tasks.append(self.statement_temporal_step.run(inp))
                 task_meta.append(
                     (dialog.id, chunk.id, chunk_speaker, ctx)
                 )

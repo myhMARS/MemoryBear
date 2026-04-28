@@ -1112,6 +1112,39 @@ async def deduplicate_entities_and_edges(
 # 在主流程这里 这里是之后关系去重和消歧的地方，方法可以写在其他地方
 # 此处统一对边进行处理，使用累积的 id_redirect 把边的 source/target 改成规范ID
     # 4) 边重定向与去重
+    # 4.0 预处理：将 "别名属于" 关系的 source.name/description 归并到 target 节点
+    #     必须在边重定向之前执行，此时 id_redirect 已包含精确/模糊/LLM 的合并结果
+    try:
+        entity_by_id: Dict[str, ExtractedEntityNode] = {e.id: e for e in deduped_entities}
+        for edge in entity_entity_edges:
+            if getattr(edge, "relation_type", "") != "别名属于":
+                continue
+            # 通过 id_redirect 找到合并后的规范节点
+            source_id = id_redirect.get(edge.source, edge.source)
+            target_id = id_redirect.get(edge.target, edge.target)
+            if source_id == target_id:
+                continue
+            source_node = entity_by_id.get(source_id)
+            target_node = entity_by_id.get(target_id)
+            if not source_node or not target_node:
+                continue
+
+            # 将 source.name 追加到 target.aliases（去重，忽略大小写）
+            source_name = (source_node.name or "").strip()
+            if source_name:
+                existing_lower = {a.lower() for a in (target_node.aliases or [])}
+                if source_name.lower() not in existing_lower and source_name.lower() != (target_node.name or "").lower():
+                    target_node.aliases = list(target_node.aliases or []) + [source_name]
+
+            # 将 source.description 追加到 target.description（分号分隔，去重）
+            src_desc = (source_node.description or "").strip()
+            if src_desc:
+                tgt_desc = (target_node.description or "").strip()
+                if src_desc not in tgt_desc:
+                    target_node.description = f"{tgt_desc}；{src_desc}" if tgt_desc else src_desc
+    except Exception:
+        pass
+
     # 4.1 语句→实体边：重复时优先保留 strong
     stmt_ent_map: Dict[str, StatementEntityEdge] = {}
     for edge in statement_entity_edges:

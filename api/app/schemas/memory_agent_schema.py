@@ -1,8 +1,31 @@
 import uuid
 from abc import ABC
-from typing import Optional
+from enum import Enum
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
+
+
+class StorageType(str, Enum):
+    """记忆存储后端类型"""
+    NEO4J = "neo4j"
+    RAG = "rag"
+
+
+class Language(str, Enum): # 没有传递到聚类的celery任务中去，任务会回退失败用默认值，考虑统一语言问题
+    """支持的语言"""
+    ZH = "zh"
+    EN = "en"
+
+
+class MessageItem(BaseModel):
+    """单条消息结构"""
+    role: str
+    content: str
+    files: Optional[list[dict]] = None
+    file_content: Optional[list[Any]] = None
+
+    model_config = {"extra": "allow"}
 
 
 class UserInput(BaseModel):
@@ -19,6 +42,16 @@ class Write_UserInput(BaseModel):
     config_id: Optional[str] = None
 
 
+class WriteMemoryRequest(BaseModel):
+    """write_memory() 的参数封装"""
+    end_user_id: str
+    messages: list[MessageItem]
+    config_id: Optional[Any] = None
+    storage_type: StorageType = StorageType.NEO4J
+    user_rag_memory_id: str = ""
+    language: Language = Language.ZH
+
+
 class AgentMemory_Long_Term(ABC):
     """长期记忆配置常量"""
     STORAGE_NEO4J = "neo4j"
@@ -26,7 +59,7 @@ class AgentMemory_Long_Term(ABC):
     STRATEGY_AGGREGATE = "aggregate"
     STRATEGY_CHUNK = "chunk"
     STRATEGY_TIME = "time"
-    DEFAULT_SCOPE = 6
+    DEFAULT_SCOPE = 1
     TIME_SCOPE = 5
 
 

@@ -12,11 +12,11 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from app.core.memory.models.message_models import DialogData
 from app.core.memory.models.variate_config import ExtractionPipelineConfig
-from app.core.memory.storage_services.extraction_engine.dedup_step import (
+from app.core.memory.storage_services.extraction_engine.steps.dedup_step import (
     DedupResult,
     run_dedup,
 )
-from app.core.memory.storage_services.extraction_engine.steps.extraction_pipeline_orchestrator import (
+from app.core.memory.storage_services.extraction_engine.extraction_pipeline_orchestrator import (
     NewExtractionOrchestrator,
 )
 from app.core.memory.storage_services.extraction_engine.steps.graph_build_step import (

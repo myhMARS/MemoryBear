@@ -1107,6 +1107,35 @@ RETURN (
 ) AS is_complete
 """
 
+# 别名归并：将 predicate="别名属于" 的 EXTRACTED_RELATIONSHIP 边的 source.name
+# 合并进 target.aliases（去重），并将 source.description 追加到 target.description（分号分隔）
+MERGE_ALIAS_BELONGS_TO = """
+MATCH (source:ExtractedEntity {end_user_id: $end_user_id})-[r:EXTRACTED_RELATIONSHIP]->(target:ExtractedEntity {end_user_id: $end_user_id})
+WHERE r.predicate = '别名属于'
+WITH source, target,
+     coalesce(target.aliases, []) AS existing_aliases,
+     source.name AS source_name,
+     coalesce(source.description, '') AS src_desc,
+     coalesce(target.description, '') AS tgt_desc
+
+// 1. 合并 aliases：将 source.name 追加到 target.aliases（去重）
+WITH source, target, src_desc, tgt_desc,
+     CASE
+         WHEN source_name IS NOT NULL AND source_name <> '' AND NOT source_name IN existing_aliases
+         THEN existing_aliases + source_name
+         ELSE existing_aliases
+     END AS new_aliases
+
+SET target.aliases = new_aliases,
+    target.description = CASE
+        WHEN src_desc <> '' AND NOT src_desc IN tgt_desc
+        THEN CASE WHEN tgt_desc = '' THEN src_desc ELSE tgt_desc + '；' + src_desc END
+        ELSE tgt_desc
+    END
+
+RETURN source.name AS merged_alias, target.name AS target_name, new_aliases AS updated_aliases
+"""
+
 CHECK_COMMUNITY_IS_COMPLETE_WITH_EMBEDDING = """
 MATCH (c:Community {community_id: $community_id, end_user_id: $end_user_id})
 RETURN (

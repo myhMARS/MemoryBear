@@ -39,6 +39,7 @@ from app.models import Document, File, Knowledge
 from app.models.end_user_model import EndUser
 from app.schemas import document_schema, file_schema
 from app.services.memory_agent_service import MemoryAgentService, get_end_user_connected_config
+from app.schemas.memory_agent_schema import WriteMemoryRequest
 from app.services.memory_forget_service import MemoryForgetService
 from app.utils.config_utils import resolve_config_id
 from app.utils.redis_lock import RedisFairLock
@@ -1471,8 +1472,17 @@ def write_message_task(
                 f"[CELERY WRITE] Executing MemoryAgentService.write_memory "
                 f"with config_id={actual_config_id} (type: {type(actual_config_id).__name__}), language={language}")
             service = MemoryAgentService()
-            result = await service.write_memory(end_user_id, message, actual_config_id, db, storage_type,
-                                                user_rag_memory_id, language)
+            result = await service.write_memory(
+                WriteMemoryRequest(
+                    end_user_id=end_user_id,
+                    messages=message,
+                    config_id=actual_config_id,
+                    storage_type=storage_type,
+                    user_rag_memory_id=user_rag_memory_id,
+                    language=language,
+                ),
+                db,
+            )
             logger.info(f"[CELERY WRITE] Write completed successfully: {result}")
             return result
 

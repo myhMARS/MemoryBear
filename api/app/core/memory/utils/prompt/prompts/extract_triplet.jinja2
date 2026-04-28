@@ -250,28 +250,12 @@ Primary statement to analyze:
   - notes: 只处理名字性表达，不处理角色、职业、评价词。
   - status: `enabled`
 
-- `类型归属关系`
-  - definition: 表达实体属于某种类别，或主体承担某种角色/职业身份的关系。
-  - covered_predicates: `属于类型`、`担任角色`、`从事职业`
-  - positive_examples: `王教授 -> 担任角色 -> 导师`、`张三 -> 从事职业 -> 程序员`
-  - negative_examples: `张三 -> 担任角色 -> 山哥`、`用户 -> 从事职业 -> 紧张`
-  - notes: 用于“是什么”，不用于“叫什么”。
-  - status: `enabled`
-
-- `成员隶属关系`
-  - definition: 表达主体属于某个组织、群体或集合的成员归属关系。
-  - covered_predicates: `成员属于`
-  - positive_examples: `张三 -> 成员属于 -> 实验室成员`、`用户 -> 成员属于 -> 社群`
-  - negative_examples: `他们 -> 成员属于 -> 学校`、`一个朋友 -> 成员属于 -> 班级`
-  - notes: 前提是主体和归属对象都足够稳定；边界不稳的人群不要硬抽。
-  - status: `enabled`
-
-- `任职服务关系`
-  - definition: 表达人物或主体在组织中的工作、任职或服务关系。
-  - covered_predicates: `任职于`
-  - positive_examples: `张明 -> 任职于 -> 腾讯`、`王教授 -> 任职于 -> 清华大学`
-  - negative_examples: `张明 -> 任职于 -> 导师`、`用户 -> 任职于 -> 明天的面试`
-  - notes: 优先用于人物到组织的稳定供职关系。
+- `归属身份关系`
+  - definition: 表达主体所属的类别、身份、职业、角色，或其与组织、群体、集合之间的归属关系。
+  - covered_predicates: `属于类型`、`担任角色`、`从事职业`、`成员属于`、`任职于`
+  - positive_examples: `王教授 -> 担任角色 -> 导师`、`张三 -> 从事职业 -> 程序员`、`张三 -> 成员属于 -> 实验室成员`、`张明 -> 任职于 -> 腾讯`
+  - negative_examples: `张三 -> 担任角色 -> 山哥`、`他们 -> 成员属于 -> 学校`、`用户 -> 任职于 -> 明天的面试`、`用户 -> 从事职业 -> 紧张`
+  - notes: 这是一个上位父类，用于统一承接“是什么身份”与“归属哪里”两类关系。第一层不再强行区分“身份类归属”和“组织类归属”，真正的区分在子类 predicate 层完成。
   - status: `enabled`
 
 - `空间位置关系`

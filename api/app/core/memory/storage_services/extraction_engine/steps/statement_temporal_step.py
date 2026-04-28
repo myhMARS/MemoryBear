@@ -1,4 +1,4 @@
-"""StatementExtractionStep — critical step for extracting statements from chunks.
+"""StatementTemporalExtractionStep — critical step for extracting statements and temporal info from chunks.
 
 Replaces the legacy ``StatementExtractor`` with the unified ExtractionStep paradigm.
 Temporal extraction logic (valid_at / invalid_at) is merged into this step,
@@ -62,8 +62,8 @@ class _StatementExtractionResponse(BaseModel):
         return v
 
 
-class StatementExtractionStep(ExtractionStep[StatementStepInput, List[StatementStepOutput]]):
-    """Extract atomic statements (with temporal info) from a dialogue chunk.
+class StatementTemporalExtractionStep(ExtractionStep[StatementStepInput, List[StatementStepOutput]]):
+    """Extract atomic statements with temporal info (valid_at / invalid_at) from a dialogue chunk.
 
     This is a **critical** step — failure aborts the pipeline after retries.
 

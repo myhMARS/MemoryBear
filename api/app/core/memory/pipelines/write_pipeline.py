@@ -227,6 +227,14 @@ class WritePipeline:
                 f"✔ {time.time() - step_start:.2f}s"
             )
 
+            # Step 3.2: 别名归并 - 处理 predicate="别名属于" 的关系
+            step_start = time.time()
+            await self._merge_alias_belongs_to(extraction_result)
+            logger.info(
+                f"[WritePipeline] [3.2] 别名归并：处理别名属于关系 "
+                f"✔ {time.time() - step_start:.2f}s"
+            )
+
             # Step 3.5: 异步情绪提取（fire-and-forget，需在 _store 之后确保 Statement 节点已存在）
             await self._extract_emotion(getattr(self, "_emotion_statements", []))
 
@@ -316,13 +324,13 @@ class WritePipeline:
         2. build_graph_nodes_and_edges() → 从 DialogData 构建图节点和边
         3. run_dedup() → 两阶段去重消歧
         """
-        from app.core.memory.storage_services.extraction_engine.dedup_step import (
+        from app.core.memory.storage_services.extraction_engine.steps.dedup_step import (
             run_dedup,
         )
         from app.core.memory.storage_services.extraction_engine.steps.graph_build_step import (
             build_graph_nodes_and_edges,
         )
-        from app.core.memory.storage_services.extraction_engine.steps.extraction_pipeline_orchestrator import (
+        from app.core.memory.storage_services.extraction_engine.extraction_pipeline_orchestrator import (
             NewExtractionOrchestrator,
         )
 
@@ -553,6 +561,78 @@ class WritePipeline:
                     await asyncio.sleep(1 * (attempt + 1))
                 else:
                     raise
+
+    # ──────────────────────────────────────────────
+    # Step 3.2: 别名归并
+    # ──────────────────────────────────────────────
+
+    async def _merge_alias_belongs_to(self, result: ExtractionResult) -> None:
+        """
+        所有去重合并都可以使用这个这种统一的处理方式（未实现）
+        别名归并：处理 predicate="别名属于" 的 EXTRACTED_RELATIONSHIP 边。
+
+        对每条 source -[EXTRACTED_RELATIONSHIP {predicate:"别名属于"}]-> target 边：
+        - 将 source.name 追加到 target.aliases（去重）
+        - 将 source.description append 进 target.description_list（list 形式）
+
+        同时在内存中同步更新 ExtractionResult.entity_nodes，保持内存与 Neo4j 一致。
+        失败不中断主流程。
+        """
+        from app.repositories.neo4j.cypher_queries import MERGE_ALIAS_BELONGS_TO
+
+        ALIAS_PREDICATE = "别名属于"
+
+        # 筛选出所有 predicate="别名属于" 的边
+        alias_edges = [
+            e for e in result.entity_entity_edges
+            if getattr(e, "relation_type", "") == ALIAS_PREDICATE
+            or getattr(e, "predicate", "") == ALIAS_PREDICATE
+        ]
+
+        if not alias_edges:
+            logger.debug("[AliasMerge] 无 '别名属于' 关系，跳过")
+            return
+
+        try:
+            # ── 1. 在内存中同步更新 entity_nodes ──
+            entity_map = {e.id: e for e in result.entity_nodes}
+
+            for edge in alias_edges:
+                source_node = entity_map.get(edge.source)
+                target_node = entity_map.get(edge.target)
+                if not source_node or not target_node:
+                    continue
+
+                # 将 source.name 追加到 target.aliases（去重，忽略大小写）
+                source_name = (source_node.name or "").strip()
+                if source_name:
+                    existing_lower = {a.lower() for a in (target_node.aliases or [])}
+                    if source_name.lower() not in existing_lower:
+                        target_node.aliases = list(target_node.aliases or []) + [source_name]
+
+                # 将 source.description append 进 target.description（追加，分号分隔）
+                src_desc = (source_node.description or "").strip()
+                if src_desc:
+                    tgt_desc = (target_node.description or "").strip()
+                    if src_desc not in tgt_desc:
+                        target_node.description = f"{tgt_desc}；{src_desc}" if tgt_desc else src_desc
+
+            logger.info(
+                f"[AliasMerge] 内存同步完成，处理 {len(alias_edges)} 条 '别名属于' 边"
+            )
+
+            # ── 2. 写入 Neo4j ──
+            records = await self._neo4j_connector.execute_query(
+                MERGE_ALIAS_BELONGS_TO,
+                end_user_id=self.end_user_id,
+            )
+            merged_count = len(records) if records else 0
+            logger.info(
+                f"[AliasMerge] Neo4j 别名归并完成，影响 {merged_count} 条记录"
+            )
+
+        except Exception as e:
+            logger.warning(f"[AliasMerge] 别名归并失败（不影响主流程）: {e}", exc_info=True)
 
     # ──────────────────────────────────────────────
     # Step 4: 聚类

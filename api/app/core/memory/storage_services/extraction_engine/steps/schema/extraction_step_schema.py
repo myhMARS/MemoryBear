@@ -28,7 +28,7 @@ class SupportingContext(BaseModel):
 
 # ── Statement extraction ──
 class StatementStepInput(BaseModel):
-    """Input for StatementExtractionStep."""
+    """Input for StatementTemporalExtractionStep."""
 
     chunk_id: str
     end_user_id: str
