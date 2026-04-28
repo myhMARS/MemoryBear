@@ -1,8 +1,10 @@
 import os
+import csv
+import io
 from typing import Any, Optional
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
@@ -344,6 +346,46 @@ async def create_chunks_batch(
     db.commit()
 
     return success(data=jsonable_encoder(chunks), msg=f"Batch created {len(chunks)} chunks successfully")
+
+
+@router.post("/{kb_id}/{document_id}/import_qa", response_model=ApiResponse)
+async def import_qa_chunks(
+        kb_id: uuid.UUID,
+        document_id: uuid.UUID,
+        file: UploadFile = File(..., description="CSV 或 Excel 文件（第一行标题跳过，第一列问题，第二列答案）"),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+):
+    """
+    导入 QA 问答对（CSV/Excel），异步处理
+    """
+    api_logger.info(f"Import QA chunks: kb_id={kb_id}, document_id={document_id}, file={file.filename}, username: {current_user.username}")
+
+    # 1. 校验文件格式
+    filename = file.filename or ""
+    if not (filename.endswith(".csv") or filename.endswith(".xlsx") or filename.endswith(".xls")):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="仅支持 CSV (.csv) 或 Excel (.xlsx) 格式")
+
+    # 2. 校验知识库和文档
+    db_knowledge = knowledge_service.get_knowledge_by_id(db, knowledge_id=kb_id, current_user=current_user)
+    if not db_knowledge:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="知识库不存在或无权访问")
+
+    db_document = db.query(Document).filter(Document.id == document_id).first()
+    if not db_document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在或无权访问")
+
+    # 3. 读取文件内容，派发异步任务
+    contents = await file.read()
+
+    from app.celery_app import celery_app
+    task = celery_app.send_task(
+        "app.core.rag.tasks.import_qa_chunks",
+        args=[str(kb_id), str(document_id), filename, contents],
+        queue="qa_import"
+    )
+
+    return success(data={"task_id": task.id}, msg="QA 导入任务已提交，后台处理中")
 
 
 @router.get("/{kb_id}/{document_id}/{doc_id}", response_model=ApiResponse)
