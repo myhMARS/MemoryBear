@@ -49,6 +49,8 @@ const configFields = [
   { key: 'n', max: 10, min: 1, step: 1, defaultValue: 1 },
 ]
 
+const min_thinking_budget_tokens = 128;
+const default_thinking_budget_tokens = 1000;
 const ModelConfigModal = forwardRef<ModelConfigModalRef, ModelConfigModalProps>(({
   refresh,
   data,
@@ -108,7 +110,7 @@ const ModelConfigModal = forwardRef<ModelConfigModalRef, ModelConfigModalProps>(
     const newValues: ModelConfig = {
       capability: (option as Model).capability,
       deep_thinking: false,
-      thinking_budget_tokens: undefined,
+      thinking_budget_tokens: default_thinking_budget_tokens,
       json_output: false,
     }
     if (source === 'chat') {
@@ -127,6 +129,12 @@ const ModelConfigModal = forwardRef<ModelConfigModalRef, ModelConfigModalProps>(
     const { deep_thinking: _, json_output: __, ...rest } = data?.model_parameters || {}
     form.setFieldsValue({ ...rest })
   }, [data?.default_model_config_id])
+
+  useEffect(() => {
+    if (values?.deep_thinking && !values?.thinking_budget_tokens) {
+      form.setFieldValue('thinking_budget_tokens', default_thinking_budget_tokens)
+    }
+  }, [values?.deep_thinking])
 
   const handleReset = () => {
     if (!id) return
@@ -178,7 +186,7 @@ const ModelConfigModal = forwardRef<ModelConfigModalRef, ModelConfigModalProps>(
           name="thinking_budget_tokens"
           label={t('application.thinking_budget_tokens')}
           hidden={!['model', 'chat'].includes(source) || !(values?.deep_thinking || values?.capability?.includes('thinking'))}
-          extra={<>{t('application.range')}: [{0}, {t(`application.max_tokens`)}: {values?.max_tokens}]</>}
+          extra={<>{t('application.range')}: [{min_thinking_budget_tokens}, {t(`application.max_tokens`)}: {values?.max_tokens}]</>}
           rules={[
             { required: values?.deep_thinking, message: t('common.pleaseEnter') },
             {
@@ -195,7 +203,7 @@ const ModelConfigModal = forwardRef<ModelConfigModalRef, ModelConfigModalProps>(
         >
           <RbSlider
             step={1}
-            min={0}
+            min={min_thinking_budget_tokens}
             max={32000}
             isInput={true}
             disabled={!values?.deep_thinking}
