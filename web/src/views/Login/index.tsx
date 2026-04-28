@@ -73,7 +73,7 @@ const inputClassName = "login-input rb:rounded-[8px]! rb:p-[12px]! rb:h-[44px]! 
   return (
     <div className="rb:min-h-screen rb:flex rb:h-screen rb:bg-[#0A0A0A] rb:text-[#FFFFFF]">
       <div className="rb:relative rb:w-1/2 rb:h-screen rb:overflow-hidden">
-        <video src={loginBg} loop autoPlay muted className="rb:w-full rb:h-full rb:object-cover"></video>
+        <video src={loginBg} loop autoPlay playsInline muted className="rb:w-full rb:h-full rb:object-cover"></video>
         <div className="rb:absolute rb:top-10 rb:left-12">
           <div className={clsx("rb:h-8.25 rb:bg-cover", {
             "rb:w-89 rb:bg-[url('@/assets/images/login/title_en.png')]": language !== 'zh',
