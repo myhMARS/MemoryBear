@@ -3,9 +3,9 @@ name: Sync to Gitee
 on:
   push:
     branches:
-      - '*' # All branchs
+      - '**' # All branchs
     tags:
-      - '*'      # All version tags (v1.0.0, etc.)
+      - '**'      # All version tags (v1.0.0, etc.)
 
 jobs:
   sync:
