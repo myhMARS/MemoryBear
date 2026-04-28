@@ -336,8 +336,11 @@ def parse_document(file_key: str, document_id: uuid.UUID, file_name: str = ""):
                     """为单个 chunk 生成 QA 对（带缓存），返回 (global_idx, qa_pairs)"""
                     global_idx, item = idx_item
                     content = item["content_with_weight"]
-                    cached = get_llm_cache(chat_model.model_name, content, "qa",
-                                           {"topn": auto_questions_topn})
+                    cache_params = {"topn": auto_questions_topn}
+                    if qa_prompt:
+                        import hashlib
+                        cache_params["prompt_hash"] = hashlib.md5(qa_prompt.encode()).hexdigest()[:8]
+                    cached = get_llm_cache(chat_model.model_name, content, "qa", cache_params)
                     if not cached:
                         try:
                             pairs = qa_proposal(chat_model, content, auto_questions_topn, custom_prompt=qa_prompt)
@@ -346,7 +349,7 @@ def parse_document(file_key: str, document_id: uuid.UUID, file_name: str = ""):
                             return global_idx, []
                         # 缓存存 JSON 字符串
                         set_llm_cache(chat_model.model_name, content, json.dumps(pairs, ensure_ascii=False), "qa",
-                                      {"topn": auto_questions_topn})
+                                      cache_params)
                         return global_idx, pairs
                     # 从缓存读取：可能是 JSON 字符串或旧格式纯文本
                     if isinstance(cached, str):
