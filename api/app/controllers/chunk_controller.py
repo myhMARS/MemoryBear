@@ -285,6 +285,67 @@ async def create_chunk(
     return success(data=jsonable_encoder(chunk), msg="Document chunk creation successful")
 
 
+@router.post("/{kb_id}/{document_id}/chunk/batch", response_model=ApiResponse)
+async def create_chunks_batch(
+        kb_id: uuid.UUID,
+        document_id: uuid.UUID,
+        batch_data: chunk_schema.ChunkBatchCreate,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+):
+    """
+    Batch create chunks (max 8)
+    """
+    api_logger.info(f"Batch create chunks: kb_id={kb_id}, document_id={document_id}, count={len(batch_data.items)}, username: {current_user.username}")
+
+    if len(batch_data.items) > settings.MAX_CHUNK_BATCH_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Batch size exceeds limit: max {settings.MAX_CHUNK_BATCH_SIZE}, got {len(batch_data.items)}"
+        )
+
+    db_knowledge = knowledge_service.get_knowledge_by_id(db, knowledge_id=kb_id, current_user=current_user)
+    if not db_knowledge:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="The knowledge base does not exist or access is denied")
+
+    db_document = db.query(Document).filter(Document.id == document_id).first()
+    if not db_document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="The document does not exist or you do not have permission to access it")
+
+    vector_service = ElasticSearchVectorFactory().init_vector(knowledge=db_knowledge)
+
+    # Get current max sort_id
+    sort_id = 0
+    total, items = vector_service.search_by_segment(document_id=str(document_id), pagesize=1, page=1, asc=False)
+    if items:
+        sort_id = items[0].metadata["sort_id"]
+
+    chunks = []
+    for create_data in batch_data.items:
+        sort_id += 1
+        doc_id = uuid.uuid4().hex
+        metadata = {
+            "doc_id": doc_id,
+            "file_id": str(db_document.file_id),
+            "file_name": db_document.file_name,
+            "file_created_at": int(db_document.created_at.timestamp() * 1000),
+            "document_id": str(document_id),
+            "knowledge_id": str(kb_id),
+            "sort_id": sort_id,
+            "status": 1,
+        }
+        if create_data.is_qa:
+            metadata.update(create_data.qa_metadata)
+        chunks.append(DocumentChunk(page_content=create_data.chunk_content, metadata=metadata))
+
+    vector_service.add_chunks(chunks)
+
+    db_document.chunk_num += len(chunks)
+    db.commit()
+
+    return success(data=jsonable_encoder(chunks), msg=f"Batch created {len(chunks)} chunks successfully")
+
+
 @router.get("/{kb_id}/{document_id}/{doc_id}", response_model=ApiResponse)
 async def get_chunk(
         kb_id: uuid.UUID,

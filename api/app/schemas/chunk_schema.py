@@ -77,3 +77,8 @@ class ChunkRetrieve(BaseModel):
     vector_similarity_weight: float | None = Field(None)
     top_k: int | None = Field(None)
     retrieve_type: RetrieveType | None = Field(None)
+
+
+class ChunkBatchCreate(BaseModel):
+    """批量创建 chunk"""
+    items: list[ChunkCreate] = Field(..., min_length=1, description="chunk 列表")

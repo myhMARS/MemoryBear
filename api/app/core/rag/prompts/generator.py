@@ -138,9 +138,19 @@ def question_proposal(chat_mdl, content, topn=3):
     return "\n".join([p["question"] for p in pairs])
 
 
-def qa_proposal(chat_mdl, content, topn=3):
-    """生成 QA 对，返回 [{"question": ..., "answer": ...}, ...]"""
-    template = PROMPT_JINJA_ENV.from_string(QUESTION_PROMPT_TEMPLATE)
+def qa_proposal(chat_mdl, content, topn=3, custom_prompt=None):
+    """生成 QA 对，返回 [{"question": ..., "answer": ...}, ...]
+    
+    Args:
+        chat_mdl: LLM 模型
+        content: 文本内容
+        topn: 生成 QA 对数量
+        custom_prompt: 自定义 prompt 模板（支持 Jinja2，可用变量: content, topn）
+    """
+    if custom_prompt:
+        template = PROMPT_JINJA_ENV.from_string(custom_prompt)
+    else:
+        template = PROMPT_JINJA_ENV.from_string(QUESTION_PROMPT_TEMPLATE)
     rendered_prompt = template.render(content=content, topn=topn)
 
     msg = [{"role": "system", "content": rendered_prompt}, {"role": "user", "content": "Output: "}]
