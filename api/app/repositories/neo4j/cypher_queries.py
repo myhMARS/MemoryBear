@@ -139,6 +139,65 @@ SET e.name = CASE WHEN entity.name IS NOT NULL AND entity.name <> '' THEN entity
 RETURN e.id AS uuid
 """
 
+# ── 元数据增量回写：将 LLM 提取的元数据追加到用户实体节点 ──
+ENTITY_METADATA_UPDATE = """
+MATCH (e:ExtractedEntity {id: $entity_id})
+SET e.core_facts = CASE
+        WHEN $core_facts IS NOT NULL AND size($core_facts) > 0
+        THEN reduce(acc = coalesce(e.core_facts, []), item IN $core_facts |
+            CASE WHEN item IN acc THEN acc ELSE acc + item END)
+        ELSE coalesce(e.core_facts, []) END,
+    e.traits = CASE
+        WHEN $traits IS NOT NULL AND size($traits) > 0
+        THEN reduce(acc = coalesce(e.traits, []), item IN $traits |
+            CASE WHEN item IN acc THEN acc ELSE acc + item END)
+        ELSE coalesce(e.traits, []) END,
+    e.relations = CASE
+        WHEN $relations IS NOT NULL AND size($relations) > 0
+        THEN reduce(acc = coalesce(e.relations, []), item IN $relations |
+            CASE WHEN item IN acc THEN acc ELSE acc + item END)
+        ELSE coalesce(e.relations, []) END,
+    e.goals = CASE
+        WHEN $goals IS NOT NULL AND size($goals) > 0
+        THEN reduce(acc = coalesce(e.goals, []), item IN $goals |
+            CASE WHEN item IN acc THEN acc ELSE acc + item END)
+        ELSE coalesce(e.goals, []) END,
+    e.interests = CASE
+        WHEN $interests IS NOT NULL AND size($interests) > 0
+        THEN reduce(acc = coalesce(e.interests, []), item IN $interests |
+            CASE WHEN item IN acc THEN acc ELSE acc + item END)
+        ELSE coalesce(e.interests, []) END,
+    e.beliefs_or_stances = CASE
+        WHEN $beliefs_or_stances IS NOT NULL AND size($beliefs_or_stances) > 0
+        THEN reduce(acc = coalesce(e.beliefs_or_stances, []), item IN $beliefs_or_stances |
+            CASE WHEN item IN acc THEN acc ELSE acc + item END)
+        ELSE coalesce(e.beliefs_or_stances, []) END,
+    e.anchors = CASE
+        WHEN $anchors IS NOT NULL AND size($anchors) > 0
+        THEN reduce(acc = coalesce(e.anchors, []), item IN $anchors |
+            CASE WHEN item IN acc THEN acc ELSE acc + item END)
+        ELSE coalesce(e.anchors, []) END,
+    e.events = CASE
+        WHEN $events IS NOT NULL AND size($events) > 0
+        THEN reduce(acc = coalesce(e.events, []), item IN $events |
+            CASE WHEN item IN acc THEN acc ELSE acc + item END)
+        ELSE coalesce(e.events, []) END
+RETURN e.id AS uuid
+"""
+
+# ── 查询用户实体已有的元数据（供增量提取时去重） ──
+ENTITY_METADATA_QUERY = """
+MATCH (e:ExtractedEntity {id: $entity_id})
+RETURN e.core_facts AS core_facts,
+       e.traits AS traits,
+       e.relations AS relations,
+       e.goals AS goals,
+       e.interests AS interests,
+       e.beliefs_or_stances AS beliefs_or_stances,
+       e.anchors AS anchors,
+       e.events AS events
+"""
+
 # Add back ENTITY_RELATIONSHIP_SAVE to be used by graph_saver.save_entities_and_relationships
 ENTITY_RELATIONSHIP_SAVE = """
 UNWIND $relationships AS rel
@@ -1134,6 +1193,56 @@ SET target.aliases = new_aliases,
     END
 
 RETURN source.name AS merged_alias, target.name AS target_name, new_aliases AS updated_aliases
+"""
+
+# 边重定向：将指向别名节点（"别名属于"关系的 source）的所有其他边，重定向到用户节点（target）。
+# 处理两类边：
+#   1. EXTRACTED_RELATIONSHIP：其他实体 → 别名节点 或 别名节点 → 其他实体
+#   2. STATEMENT_ENTITY：陈述句 → 别名节点
+# 对于每条需要重定向的边，创建一条指向用户节点的新边（复制所有属性），然后删除旧边。
+REDIRECT_ALIAS_EDGES = """
+// 找到所有 别名→用户 的映射
+MATCH (alias:ExtractedEntity {end_user_id: $end_user_id})-[ar:EXTRACTED_RELATIONSHIP]->(user:ExtractedEntity {end_user_id: $end_user_id})
+WHERE ar.predicate = '别名属于'
+WITH collect({alias_id: elementId(alias), user_id: elementId(user), alias_eid: alias.id, user_eid: user.id}) AS mappings
+
+// 1. 重定向 EXTRACTED_RELATIONSHIP 边：别名节点作为 target 的情况
+UNWIND mappings AS m
+MATCH (other)-[r:EXTRACTED_RELATIONSHIP]->(alias:ExtractedEntity {end_user_id: $end_user_id})
+WHERE alias.id = m.alias_eid
+  AND r.predicate <> '别名属于'
+  AND other.id <> m.user_eid
+WITH m, other, r, alias
+MATCH (user:ExtractedEntity {id: m.user_eid, end_user_id: $end_user_id})
+CREATE (other)-[nr:EXTRACTED_RELATIONSHIP]->(user)
+SET nr = properties(r)
+DELETE r
+WITH count(*) AS redirected_incoming
+
+// 2. 重定向 EXTRACTED_RELATIONSHIP 边：别名节点作为 source 的情况
+MATCH (alias:ExtractedEntity {end_user_id: $end_user_id})-[ar2:EXTRACTED_RELATIONSHIP]->(user2:ExtractedEntity {end_user_id: $end_user_id})
+WHERE ar2.predicate = '别名属于'
+WITH alias, user2, redirected_incoming
+MATCH (alias)-[r:EXTRACTED_RELATIONSHIP]->(other)
+WHERE r.predicate <> '别名属于'
+  AND other.id <> user2.id
+WITH user2, other, r, redirected_incoming
+CREATE (user2)-[nr:EXTRACTED_RELATIONSHIP]->(other)
+SET nr = properties(r)
+DELETE r
+WITH redirected_incoming, count(*) AS redirected_outgoing
+
+// 3. 重定向 STATEMENT_ENTITY 边：陈述句 → 别名节点
+MATCH (alias:ExtractedEntity {end_user_id: $end_user_id})-[ar3:EXTRACTED_RELATIONSHIP]->(user3:ExtractedEntity {end_user_id: $end_user_id})
+WHERE ar3.predicate = '别名属于'
+WITH alias, user3, redirected_incoming, redirected_outgoing
+MATCH (stmt)-[r:STATEMENT_ENTITY]->(alias)
+WITH user3, stmt, r, redirected_incoming, redirected_outgoing
+CREATE (stmt)-[nr:STATEMENT_ENTITY]->(user3)
+SET nr = properties(r)
+DELETE r
+
+RETURN redirected_incoming, redirected_outgoing, count(*) AS redirected_stmt
 """
 
 CHECK_COMMUNITY_IS_COMPLETE_WITH_EMBEDDING = """

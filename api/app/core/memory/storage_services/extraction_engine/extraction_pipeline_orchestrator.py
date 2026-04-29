@@ -25,7 +25,7 @@ from app.core.memory.models.variate_config import ExtractionPipelineConfig
 
 from .steps.base import ExtractionStep, StepContext
 from .steps.embedding_step import EmbeddingStep
-from .steps.sidecar_factory import SidecarStepFactory, SidecarTiming
+from .sidecar_factory import SidecarStepFactory, SidecarTiming
 from .steps.statement_temporal_step import StatementTemporalExtractionStep
 from .steps.triplet_step import TripletExtractionStep
 from .steps.schema import (

@@ -19,6 +19,8 @@ from .extraction_step_schema import (
 from .sidecar_step_schema import (
     EmotionStepInput,
     EmotionStepOutput,
+    MetadataStepInput,
+    MetadataStepOutput,
 )
 
 __all__ = [
@@ -39,4 +41,7 @@ __all__ = [
     # Sidecar — Emotion
     "EmotionStepInput",
     "EmotionStepOutput",
+    # Sidecar — Metadata
+    "MetadataStepInput",
+    "MetadataStepOutput",
 ]

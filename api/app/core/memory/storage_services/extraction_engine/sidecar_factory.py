@@ -9,7 +9,7 @@ import logging
 from enum import Enum
 from typing import Any, Dict, List, Tuple, Type
 
-from .base import ExtractionStep, StepContext
+from .steps.base import ExtractionStep, StepContext
 
 logger = logging.getLogger(__name__)
 

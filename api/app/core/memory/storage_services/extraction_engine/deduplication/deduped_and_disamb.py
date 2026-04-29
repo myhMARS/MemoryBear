@@ -117,12 +117,18 @@ def _merge_attribute(canonical: ExtractedEntityNode, ent: ExtractedEntityNode):
     except Exception:
         pass
 
-    # 描述与事实摘要（保留更长者）
+    # 描述合并（去重拼接，分号分隔）
     try:
-        desc_a = getattr(canonical, "description", "") or ""
-        desc_b = getattr(ent, "description", "") or ""
-        if len(desc_b) > len(desc_a):
-            canonical.description = desc_b
+        desc_a = (getattr(canonical, "description", "") or "").strip()
+        desc_b = (getattr(ent, "description", "") or "").strip()
+        if desc_b and desc_b != desc_a:
+            if desc_a:
+                # 将已有 description 按分号拆分，检查新 description 是否已存在
+                existing_parts = {p.strip() for p in desc_a.replace("；", ";").split(";") if p.strip()}
+                if desc_b not in existing_parts:
+                    canonical.description = f"{desc_a}；{desc_b}"
+            else:
+                canonical.description = desc_b
         # 合并事实摘要：统一保留一个“实体: name”行，来源行去重保序
         # TODO: fact_summary 功能暂时禁用，待后续开发完善后启用
         # fact_a = getattr(canonical, "fact_summary", "") or ""

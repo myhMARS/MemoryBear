@@ -311,53 +311,8 @@ class ExtractionOrchestrator:
                 dialog_data_list,
             )
 
-            # 步骤 7: 触发异步元数据和别名提取（仅正式模式）
-            if not is_pilot_run:
-                try:
-                    from app.core.memory.storage_services.extraction_engine.knowledge_extraction.metadata_extractor import (
-                        MetadataExtractor,
-                    )
-
-                    metadata_extractor = MetadataExtractor(
-                        llm_client=self.llm_client, language=self.language
-                    )
-                    user_statements = (
-                        metadata_extractor.collect_user_related_statements(
-                            entity_nodes, statement_nodes, statement_entity_edges
-                        )
-                    )
-                    if user_statements:
-                        end_user_id = (
-                            dialog_data_list[0].end_user_id
-                            if dialog_data_list
-                            else None
-                        )
-                        config_id = (
-                            dialog_data_list[0].config_id
-                            if dialog_data_list
-                            and hasattr(dialog_data_list[0], "config_id")
-                            else None
-                        )
-                        if end_user_id:
-                            from app.tasks import extract_user_metadata_task
-
-                            extract_user_metadata_task.delay(
-                                end_user_id=str(end_user_id),
-                                statements=user_statements,
-                                config_id=str(config_id) if config_id else None,
-                                language=self.language,
-                            )
-                            logger.info(
-                                f"已触发异步元数据提取任务，共 {len(user_statements)} 条用户相关 statement"
-                            )
-                    else:
-                        logger.info("未找到用户相关 statement，跳过元数据提取")
-                except Exception as e:
-                    logger.error(
-                        f"触发元数据提取任务失败（不影响主流程）: {e}", exc_info=True
-                    )
-
-                # 别名同步已迁移到 Celery 元数据提取任务中，不再在此处执行
+            # 步骤 7: 元数据提取已迁移到新流水线（WritePipeline._extract_metadata），
+            # 旧编排器不再触发异步元数据提取任务。
 
             logger.info(f"知识提取流水线运行完成（{mode_str}）")
             return (

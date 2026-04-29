@@ -308,6 +308,7 @@ async def build_graph_nodes_and_edges(
                     object_entity_id = entity_idx_to_id.get(triplet.object_id)
 
                     if subject_entity_id and object_entity_id:
+                        _tv = getattr(statement, "temporal_validity", None)
                         entity_entity_edges.append(
                             EntityEntityEdge(
                                 source=subject_entity_id,
@@ -320,6 +321,8 @@ async def build_graph_nodes_and_edges(
                                 run_id=dialog_data.run_id,
                                 created_at=dialog_data.created_at,
                                 expired_at=dialog_data.expired_at,
+                                valid_at=_tv.valid_at if _tv else None,
+                                invalid_at=_tv.invalid_at if _tv else None,
                             )
                         )
 

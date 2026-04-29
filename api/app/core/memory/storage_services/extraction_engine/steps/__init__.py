@@ -4,7 +4,7 @@ Importing this package triggers @register decorator self-registration
 for all sidecar (non-critical) steps via SidecarStepFactory.
 """
 
-from .sidecar_factory import SidecarStepFactory, SidecarTiming  # noqa: F401
+from ..sidecar_factory import SidecarStepFactory, SidecarTiming  # noqa: F401
 
 # Step implementations — importing triggers @register self-registration.
 from .statement_temporal_step import StatementTemporalExtractionStep  # noqa: F401

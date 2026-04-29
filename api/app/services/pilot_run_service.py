@@ -12,7 +12,6 @@ from typing import Awaitable, Callable, Optional
 
 from app.core.config import settings
 from app.core.logging_config import get_memory_logger, log_time
-from app.core.memory.pipelines.pilot_write_pipeline import PilotWritePipeline
 from app.core.memory.models.message_models import (
     ConversationContext,
     ConversationMessage,
@@ -306,14 +305,11 @@ async def run_pilot_extraction(
             logger.warning(f"Failed to load ontology types: {e}", exc_info=True)
 
         if use_refactored:
-            pilot_pipeline = PilotWritePipeline(
-                llm_client=llm_client,
-                embedder_client=embedder_client,
-                pipeline_config=get_pipeline_config(memory_config),
-                progress_callback=progress_callback,
-                embedding_id=str(memory_config.embedding_model_id),
-                language=language,
-                ontology_types=ontology_types,
+            from app.core.memory.memory_service import MemoryService
+
+            memory_service = MemoryService(
+                memory_config=memory_config,
+                end_user_id=str(memory_config.workspace_id),
             )
             log_time("Pilot Pipeline Initialization", time.time() - step_start, log_file)
 
@@ -325,7 +321,11 @@ async def run_pilot_extraction(
             if progress_callback:
                 await progress_callback("knowledge_extraction", "正在知识抽取...")
 
-            pilot_result = await pilot_pipeline.run(chunked_dialogs)
+            pilot_result = await memory_service.pilot_write(
+                chunked_dialogs=chunked_dialogs,
+                language=language,
+                progress_callback=progress_callback,
+            )
             dialog_data_list = pilot_result.dialog_data_list
             graph = pilot_result.graph
             chunk_nodes = graph.chunk_nodes

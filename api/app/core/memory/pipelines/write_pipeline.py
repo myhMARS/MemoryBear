@@ -186,9 +186,12 @@ class WritePipeline:
                 self._init_clients()
                 self._init_neo4j_connector()
 
-                # 初始化 Snapshot（提前创建，供预处理阶段的剪枝使用）
-                from app.core.memory.utils.debug.pipeline_snapshot import PipelineSnapshot
-                self._snapshot = PipelineSnapshot("new")
+                # 初始化快照记录器（提前创建，供预处理阶段的剪枝使用）
+                from app.core.memory.utils.debug.write_snapshot_recorder import (
+                    WriteSnapshotRecorder,
+                )
+
+                self._recorder = WriteSnapshotRecorder("new")
 
                 # Step 1: 预处理 - 消息分块 + AI消息语义剪枝
                 async with bear.step(1, 5, "预处理", "消息分块") as s:
@@ -197,7 +200,9 @@ class WritePipeline:
 
                 # Step 2: 萃取 - 知识提取
                 async with bear.step(2, 5, "萃取", "知识提取") as s:
-                    extraction_result = await self._extract(chunked_dialogs, is_pilot_run)
+                    extraction_result = await self._extract(
+                        chunked_dialogs, is_pilot_run
+                    )
                     stats = extraction_result.stats
                     s.metadata(
                         entities=stats["entity_count"],
@@ -223,6 +228,9 @@ class WritePipeline:
 
                 # Step 3.5: 异步情绪提取（fire-and-forget，需在 _store 之后确保 Statement 节点已存在）
                 await self._extract_emotion(getattr(self, "_emotion_statements", []))
+
+                # Step 3.6: 异步元数据提取（fire-and-forget，需在 _store 之后确保 Entity 节点已存在）
+                await self._extract_metadata(extraction_result)
 
                 # Step 4: 聚类 - 增量更新社区（异步，不阻塞）
                 async with bear.step(4, 5, "聚类", "增量更新社区") as s:
@@ -264,7 +272,8 @@ class WritePipeline:
         """
         from app.core.memory.agent.utils.get_dialogs import get_chunked_dialogs
 
-        snapshot = getattr(self, "_snapshot", None)
+        recorder = getattr(self, "_recorder", None)
+        snapshot = recorder.snapshot if recorder else None
 
         return await get_chunked_dialogs(
             chunker_strategy=self.memory_config.chunker_strategy,
@@ -308,14 +317,16 @@ class WritePipeline:
         )
 
         from app.core.memory.utils.config.config_utils import get_pipeline_config
-        from app.core.memory.utils.debug.pipeline_snapshot import PipelineSnapshot
+        from app.core.memory.utils.debug.write_snapshot_recorder import (
+            WriteSnapshotRecorder,
+        )
 
         pipeline_config = get_pipeline_config(self.memory_config)
         ontology_types = self._load_ontology_types()
 
-        # 复用 run() 中已创建的 snapshot（剪枝阶段已使用同一实例）
-        snapshot = getattr(self, "_snapshot", None) or PipelineSnapshot("new")
-        self._snapshot = snapshot
+        # 复用 run() 中已创建的 recorder（剪枝阶段已使用同一实例）
+        recorder = getattr(self, "_recorder", None) or WriteSnapshotRecorder("new")
+        self._recorder = recorder
 
         # ── 新编排器：LLM 萃取 + 数据赋值 ──
         new_orchestrator = NewExtractionOrchestrator(
@@ -335,52 +346,8 @@ class WritePipeline:
         # 注意：实际 dispatch 在 _store 之后，确保 Statement 节点已写入 Neo4j
         self._emotion_statements = new_orchestrator.emotion_statements
 
-        # ── Snapshot: 各阶段萃取结果 ── TODO 乐力齐 重构流水线切换生产环境稳定后修改
-        stage_outputs = new_orchestrator.last_stage_outputs
-        if stage_outputs:
-            stmt_results = stage_outputs.get("statement_results", {})
-            stmt_snapshot = []
-            for _did, chunk_stmts in stmt_results.items():
-                for _cid, stmts in chunk_stmts.items():
-                    for s in stmts:
-                        stmt_snapshot.append(s.model_dump())
-            snapshot.save_stage("2_statement_outputs", stmt_snapshot)
-
-            triplet_results = stage_outputs.get("triplet_results", {})
-            triplet_snapshot = {}
-            for _did, stmt_triplets in triplet_results.items():
-                for stmt_id, t_out in stmt_triplets.items():
-                    triplet_snapshot[stmt_id] = t_out.model_dump()
-            snapshot.save_stage("3_triplet_outputs", triplet_snapshot)
-
-            emotion_results = stage_outputs.get("emotion_results", {})
-            emotion_snapshot = {}
-            for stmt_id, emo in emotion_results.items():
-                if hasattr(emo, "model_dump"):
-                    emotion_snapshot[stmt_id] = emo.model_dump()
-            snapshot.save_stage("4_emotion_outputs", emotion_snapshot)
-
-            emb_output = stage_outputs.get("embedding_output")
-            if emb_output and hasattr(emb_output, "model_dump"):
-                emb_data = emb_output.model_dump()
-                for key in (
-                    "statement_embeddings",
-                    "chunk_embeddings",
-                    "entity_embeddings",
-                ):
-                    if key in emb_data and isinstance(emb_data[key], dict):
-                        emb_data[key] = {
-                            k: v[:5] if isinstance(v, list) else v
-                            for k, v in emb_data[key].items()
-                        }
-                if "dialog_embeddings" in emb_data and isinstance(
-                    emb_data["dialog_embeddings"], list
-                ):
-                    emb_data["dialog_embeddings"] = [
-                        v[:5] if isinstance(v, list) else v
-                        for v in emb_data["dialog_embeddings"]
-                    ]
-                snapshot.save_stage("5_embedding_outputs", emb_data)
+        # ── Snapshot: 各阶段萃取结果 ──
+        recorder.record_stage_outputs(new_orchestrator.last_stage_outputs)
 
         # step2: 构建图节点和边
         graph = await build_graph_nodes_and_edges(
@@ -389,34 +356,8 @@ class WritePipeline:
             progress_callback=self.progress_callback,
         )
 
-        # region Snapshot: 图节点和边（去重前）Snapshot有关的内容在重构流水线切换生产环境之后修改
-        snapshot.save_stage(
-            "6_nodes_edges_before_dedup",
-            {
-                "dialogue_nodes_count": len(graph.dialogue_nodes),
-                "chunk_nodes_count": len(graph.chunk_nodes),
-                "statement_nodes_count": len(graph.statement_nodes),
-                "entity_nodes": [
-                    {
-                        "id": e.id,
-                        "name": e.name,
-                        "entity_type": e.entity_type,
-                        "description": e.description,
-                    }
-                    for e in graph.entity_nodes
-                ],
-                "entity_entity_edges": [
-                    {
-                        "source": e.source,
-                        "target": e.target,
-                        "relation_type": e.relation_type,
-                        "statement": e.statement,
-                    }
-                    for e in graph.entity_entity_edges
-                ],
-                "stmt_entity_edges_count": len(graph.stmt_entity_edges),
-            },
-        )
+        # Snapshot: 图节点和边（去重前）
+        recorder.record_graph_before_dedup(graph)
 
         # step3: 两阶段去重消歧
         dedup_result = await run_dedup(
@@ -432,29 +373,7 @@ class WritePipeline:
         )
 
         # Snapshot: 去重后
-        snapshot.save_stage(
-            "7_after_dedup",
-            {
-                "entity_nodes": [
-                    {
-                        "id": e.id,
-                        "name": e.name,
-                        "entity_type": e.entity_type,
-                        "description": e.description,
-                    }
-                    for e in dedup_result.entity_nodes
-                ],
-                "entity_entity_edges": [
-                    {
-                        "source": e.source,
-                        "target": e.target,
-                        "relation_type": e.relation_type,
-                        "statement": e.statement,
-                    }
-                    for e in dedup_result.entity_entity_edges
-                ],
-            },
-        )
+        recorder.record_dedup_result(dedup_result)
 
         # step4: 构造最终结果
         result = ExtractionResult(
@@ -474,7 +393,7 @@ class WritePipeline:
             dialog_data_list=dialog_data_list,
         )
 
-        snapshot.save_summary(result.stats)  #  TODO 乐力齐 snapshot需要改
+        recorder.record_summary(result.stats)
         return result
 
     # ──────────────────────────────────────────────
@@ -551,7 +470,10 @@ class WritePipeline:
         同时在内存中同步更新 ExtractionResult.entity_nodes，保持内存与 Neo4j 一致。
         失败不中断主流程。
         """
-        from app.repositories.neo4j.cypher_queries import MERGE_ALIAS_BELONGS_TO
+        from app.repositories.neo4j.cypher_queries import (
+            MERGE_ALIAS_BELONGS_TO,
+            REDIRECT_ALIAS_EDGES,
+        )
 
         ALIAS_PREDICATE = "别名属于"
 
@@ -571,11 +493,16 @@ class WritePipeline:
             # ── 1. 在内存中同步更新 entity_nodes ──
             entity_map = {e.id: e for e in result.entity_nodes}
 
+            # 构建 alias_id → target_id 映射（别名节点 → 用户节点）
+            alias_to_target: dict[str, str] = {}
+
             for edge in alias_edges:
                 source_node = entity_map.get(edge.source)
                 target_node = entity_map.get(edge.target)
                 if not source_node or not target_node:
                     continue
+
+                alias_to_target[edge.source] = edge.target
 
                 # 将 source.name 追加到 target.aliases（去重，忽略大小写）
                 source_name = (source_node.name or "").strip()
@@ -595,17 +522,52 @@ class WritePipeline:
                             f"{tgt_desc}；{src_desc}" if tgt_desc else src_desc
                         )
 
+            # ── 1.1 内存中重定向指向别名节点的边到用户节点 ──
+            alias_ids = set(alias_to_target.keys())
+            redirected_ee_count = 0
+            redirected_se_count = 0
+
+            # 重定向 entity_entity_edges（排除"别名属于"边本身）
+            for edge in result.entity_entity_edges:
+                rel_type = getattr(edge, "relation_type", "")
+                if rel_type == ALIAS_PREDICATE:
+                    continue
+                if edge.source in alias_ids:
+                    edge.source = alias_to_target[edge.source]
+                    redirected_ee_count += 1
+                if edge.target in alias_ids:
+                    edge.target = alias_to_target[edge.target]
+                    redirected_ee_count += 1
+
+            # 重定向 stmt_entity_edges（陈述句 → 实体边）
+            for edge in result.stmt_entity_edges:
+                if edge.target in alias_ids:
+                    edge.target = alias_to_target[edge.target]
+                    redirected_se_count += 1
+
             logger.info(
-                f"[AliasMerge] 内存同步完成，处理 {len(alias_edges)} 条 '别名属于' 边"
+                f"[AliasMerge] 内存同步完成，处理 {len(alias_edges)} 条 '别名属于' 边，"
+                f"重定向 entity_entity 边 {redirected_ee_count} 次，"
+                f"重定向 stmt_entity 边 {redirected_se_count} 次"
             )
 
-            # ── 2. 写入 Neo4j ──
+            # ── 2. 写入 Neo4j：别名属性归并 ──
             records = await self._neo4j_connector.execute_query(
                 MERGE_ALIAS_BELONGS_TO,
                 end_user_id=self.end_user_id,
             )
             merged_count = len(records) if records else 0
             logger.info(f"[AliasMerge] Neo4j 别名归并完成，影响 {merged_count} 条记录")
+
+            # ── 3. 写入 Neo4j：重定向指向别名节点的边到用户节点 ──
+            redirect_records = await self._neo4j_connector.execute_query(
+                REDIRECT_ALIAS_EDGES,
+                end_user_id=self.end_user_id,
+            )
+            redirect_count = len(redirect_records) if redirect_records else 0
+            logger.info(
+                f"[AliasMerge] Neo4j 边重定向完成，影响 {redirect_count} 条记录"
+            )
 
         except Exception as e:
             logger.warning(
@@ -691,10 +653,10 @@ class WritePipeline:
             return
 
         # 快照目录：仅在 PIPELINE_SNAPSHOT_ENABLED=true 时非空，供 worker 端落盘
-        snapshot = getattr(self, "_snapshot", None)
+        recorder = getattr(self, "_recorder", None)
         snapshot_dir = (
-            snapshot.directory
-            if snapshot is not None and getattr(snapshot, "enabled", False)
+            recorder.snapshot_dir
+            if recorder is not None and recorder.enabled
             else None
         )
 
@@ -720,6 +682,67 @@ class WritePipeline:
         except Exception as e:
             logger.error(
                 f"[Emotion] 提交情绪提取任务失败（不影响主流程）: {e}",
+                exc_info=True,
+            )
+
+    # ──────────────────────────────────────────────
+    # Step 3.6: 异步元数据提取
+    #    fire-and-forget 提交 Celery 任务，不阻塞主流程
+    # ──────────────────────────────────────────────
+
+    async def _extract_metadata(self, result: ExtractionResult) -> None:
+        """提交异步元数据提取 Celery 任务。
+
+        从去重后的用户实体 description 中提取结构化元数据，
+        异步回写到 Neo4j ExtractedEntity 节点。失败不影响主流程。
+        """
+        from app.core.memory.storage_services.extraction_engine.knowledge_extraction.metadata_extractor import (
+            collect_user_entities_for_metadata,
+        )
+
+        user_entities = collect_user_entities_for_metadata(result.entity_nodes)
+
+        if not user_entities:
+            return
+
+        llm_model_id = (
+            str(self.memory_config.llm_model_id)
+            if self.memory_config.llm_model_id
+            else None
+        )
+        if not llm_model_id:
+            logger.warning("[Metadata] 无法提交元数据提取任务：llm_model_id 为空")
+            return
+
+        # 快照目录
+        recorder = getattr(self, "_recorder", None)
+        snapshot_dir = (
+            recorder.snapshot_dir
+            if recorder is not None and recorder.enabled
+            else None
+        )
+
+        try:
+            from app.celery_app import celery_app
+
+            task_result = celery_app.send_task(
+                "app.tasks.extract_metadata_batch",
+                kwargs={
+                    "user_entities": user_entities,
+                    "llm_model_id": llm_model_id,
+                    "language": self.language,
+                    "snapshot_dir": snapshot_dir,
+                },
+            )
+            logger.info(
+                f"[Metadata] 异步元数据提取任务已提交 - "
+                f"task_id = {task_result.id}, "
+                f"entity_count = {len(user_entities)}, "
+                f"snapshot_dir = {snapshot_dir}"
+            )
+        except Exception as e:
+            logger.error(
+                f"[Metadata] 提交元数据提取任务失败（不影响主流程）: {e}",
                 exc_info=True,
             )
 

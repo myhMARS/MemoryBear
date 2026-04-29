@@ -16,7 +16,9 @@ import logging
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
+    from app.core.memory.pipelines.pilot_write_pipeline import PilotWriteResult
     from app.core.memory.pipelines.write_pipeline import WriteResult
+    from app.core.memory.models.message_models import DialogData
     from app.schemas.memory_config_schema import MemoryConfig
 
 logger = logging.getLogger(__name__)
@@ -82,6 +84,34 @@ class MemoryService:
             ref_id=ref_id,
             is_pilot_run=is_pilot_run,
         )
+
+    async def pilot_write(
+        self,
+        chunked_dialogs: List[DialogData],
+        language: str = "zh",
+        progress_callback: Optional[
+            Callable[[str, str, Optional[Dict[str, Any]]], Awaitable[None]]
+        ] = None,
+    ) -> PilotWriteResult:
+        """试运行写入：只执行萃取链路，不写入 Neo4j
+
+        Args:
+            chunked_dialogs: 预处理 + 分块后的 DialogData 列表
+            language: 语言 ("zh" | "en")
+            progress_callback: 可选的进度回调
+
+        Returns:
+            PilotWriteResult 包含萃取结果、图构建结果和去重结果
+        """
+        from app.core.memory.pipelines.pilot_write_pipeline import PilotWritePipeline
+
+        pipeline = PilotWritePipeline(
+            memory_config=self.memory_config,
+            end_user_id=self.end_user_id,
+            language=language,
+            progress_callback=progress_callback,
+        )
+        return await pipeline.run(chunked_dialogs)
 
     async def read(
             self,

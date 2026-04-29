@@ -12,7 +12,7 @@ from app.core.memory.models.emotion_models import EmotionExtraction
 from app.core.memory.utils.prompt.prompt_utils import render_emotion_extraction_prompt
 
 from .base import ExtractionStep, StepContext
-from .sidecar_factory import SidecarStepFactory, SidecarTiming
+from ..sidecar_factory import SidecarStepFactory, SidecarTiming
 from .schema import EmotionStepInput, EmotionStepOutput
 
 logger = logging.getLogger(__name__)

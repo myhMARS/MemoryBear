@@ -60,8 +60,6 @@ from app.core.memory.models.triplet_models import (
 
 # User metadata models
 from app.core.memory.models.metadata_models import (
-    UserMetadata,
-    UserMetadataProfile,
     MetadataExtractionResponse,
     MetadataFieldChange,
 )
@@ -132,8 +130,6 @@ __all__ = [
     "Entity",
     "Triplet",
     "TripletExtractionResponse",
-    "UserMetadata",
-    "UserMetadataProfile",
     "MetadataExtractionResponse",
     "MetadataFieldChange",
     # Ontology models

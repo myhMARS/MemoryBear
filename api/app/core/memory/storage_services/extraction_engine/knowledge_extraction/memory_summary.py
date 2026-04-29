@@ -142,7 +142,7 @@ async def generate_title_and_type_for_summary(
                     f"已归一化为 '{episodic_type}'"
                 )
             
-            logger.info(f"成功生成标题和类型 (language={language}): title={title}, type={episodic_type}")
+            logger.debug(f"成功生成标题和类型 (language={language}): title={title}, type={episodic_type}")
             return (title, episodic_type)
             
         except json.JSONDecodeError:
@@ -197,7 +197,7 @@ async def _process_chunk_summary(
                 llm_client=llm_client,
                 language=language
             )
-            logger.info(f"Generated title and type for MemorySummary (language={language}): title={title}, type={episodic_type}")
+            logger.debug(f"Generated title and type for MemorySummary (language={language}): title={title}, type={episodic_type}")
         except Exception as e:
             logger.warning(f"Failed to generate title and type for chunk {chunk.id}: {e}")
             # Continue without title and type
