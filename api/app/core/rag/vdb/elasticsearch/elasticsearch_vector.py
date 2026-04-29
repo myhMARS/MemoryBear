@@ -709,7 +709,7 @@ class ElasticSearchVector(BaseVector):
                         },
                         Field.VECTOR.value: {
                             "type": "dense_vector",
-                            "dims": len(embeddings[0]),  # Make sure the dimension is correct here,The dimension size of the vector. When index is true, it cannot exceed 1024; when index is false or not specified, it cannot exceed 2048, which can improve retrieval efficiency
+                            "dims": len(next((e for e in embeddings if e is not None), [0]*768)),  # 跳过 None 获取向量维度，fallback 768
                             "index": True,
                             "similarity": "cosine"
                         }
