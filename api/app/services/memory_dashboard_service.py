@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, nullslast, or_, and_, cast, String, func
+from sqlalchemy import desc, nullslast, or_, cast, String, func
 from typing import List, Optional, Dict, Any
 import uuid
 from fastapi import HTTPException

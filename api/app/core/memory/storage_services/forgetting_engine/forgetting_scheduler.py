@@ -146,7 +146,7 @@ class ForgettingScheduler:
                 
                 logger.info("没有可遗忘的节点对，遗忘周期结束")
                 # 同步 Neo4j 记忆节点总数到 PostgreSQL的 end_user 表的 memory_count 字段
-                await self._sync_memory_count_to_mysql(end_user_id)
+                await self._sync_memory_count_to_db(end_user_id)
                 return report
             
             # 步骤3：按激活值排序（激活值最低的优先）
@@ -304,7 +304,7 @@ class ForgettingScheduler:
                 f"耗时 {duration:.2f} 秒"
             )
             # 同步 Neo4j 记忆节点总数到 PostgreSQL的 end_user 表的 memory_count 字段
-            await self._sync_memory_count_to_mysql(end_user_id)
+            await self._sync_memory_count_to_db(end_user_id)
             return report
         
         except Exception as e:
