@@ -801,8 +801,10 @@ def import_qa_chunks(kb_id: str, document_id: str, filename: str, contents: byte
                 batch = chunks[i:i + batch_size]
                 vector_service.add_chunks(batch)
 
-            # 3. 更新 chunk_num
+            # 3. 更新 chunk_num 和 progress
             db_document.chunk_num += len(chunks)
+            db_document.progress = 1.0
+            db_document.progress_msg = f"QA 导入完成: {len(chunks)} 条"
             db.commit()
 
             result = {"imported": len(chunks), "failed_rows": failed_rows}
@@ -811,6 +813,17 @@ def import_qa_chunks(kb_id: str, document_id: str, filename: str, contents: byte
 
     except Exception as e:
         logger.error(f"[ImportQA] Failed: {e}", exc_info=True)
+        # 尝试更新文档状态为失败
+        try:
+            from app.db import get_db_context
+            with get_db_context() as err_db:
+                doc = err_db.query(Document).filter(Document.id == uuid.UUID(document_id)).first()
+                if doc:
+                    doc.progress = -1.0
+                    doc.progress_msg = f"QA 导入失败: {str(e)[:200]}"
+                    err_db.commit()
+        except Exception:
+            pass
         return {"error": str(e), "imported": 0}
 
 
