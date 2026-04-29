@@ -7,7 +7,7 @@
  * @LastEditTime: 2025-12-22 13:47:53
  */
 import { FileOutlined, FieldTimeOutlined, EditOutlined } from '@ant-design/icons';
-import { Skeleton } from 'antd';
+import { Skeleton, Flex, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { RecallTestData } from '@/views/KnowledgeBase/types';
 import { NoData } from './noData';
@@ -26,6 +26,7 @@ interface RecallTestResultProps {
   editable?: boolean; // Whether editable
   onItemClick?: (item: RecallTestData, index: number) => void; // Click item callback
   parserMode?: number; // Parser mode, 1 means QA format
+  handleCopy?: (text?: string) => void;
 }
 
 const RecallTestResult = ({ 
@@ -38,8 +39,10 @@ const RecallTestResult = ({
   editable = false,
   onItemClick,
   parserMode = 0,
+  handleCopy,
 }: RecallTestResultProps) => {
   const { t } = useTranslation();
+  console.log('chunk data', data)
 
   // Parse QA format content
   const parseQAContent = (content: string) => {
@@ -204,13 +207,21 @@ const RecallTestResult = ({
                 })()}
               </div>
             </div>
-            {item.metadata?.file_created_at && (
-              <div className='rb:flex rb:items-center rb:justify-start rb:mt-3'>
-                <span className='rb:text-gray-500 rb:text-xs'>
-                  <FieldTimeOutlined /> {formatDateTime(item.metadata.file_created_at)}
-                </span>
-              </div>
-            )}
+            <Flex align="center" justify={item.metadata?.file_created_at ? 'space-between' : 'end'} className="rb:mt-3!">
+              {item.metadata?.file_created_at && (
+                <div className='rb:flex rb:items-center rb:justify-start'>
+                  <span className='rb:text-gray-500 rb:text-xs'>
+                    <FieldTimeOutlined /> {formatDateTime(item.metadata.file_created_at)}
+                  </span>
+                </div>
+              )}
+              <Space align="center" className='rb:text-gray-500 rb:text-xs' onClick={() => handleCopy?.(item.metadata?.doc_id)}>
+                ID: {item.metadata?.doc_id}
+                <span
+                  className="rb:cursor-pointer rb:inline-block rb:size-4 rb:bg-cover rb:bg-[url('@/assets/images/common/copy_dark.svg')]"
+                ></span>
+              </Space>
+            </Flex>
           </div>
         );
       })}
@@ -244,6 +255,7 @@ const RecallTestResult = ({
       </div>
     );
   }
+
 
   // Otherwise use normal rendering
   return (

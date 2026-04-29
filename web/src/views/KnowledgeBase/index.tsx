@@ -574,6 +574,8 @@ const KnowledgeBaseManagement: FC = () => {
                         title={item.name}
                         headerType="borderless"
                         headerClassName="rb:py-3!"
+                        className="rb:cursor-pointer"
+                        onClick={() => handleToDetail(item)}
                         extra={
                           <div onClick={(e) => e.stopPropagation()}>
                             <Dropdown
@@ -585,7 +587,7 @@ const KnowledgeBaseManagement: FC = () => {
                           </div>
                         }
                       >
-                        <div className='' onClick={() => handleToDetail(item)}>
+                        <div className=''>
                           <div className="rb:flex rb:text-[#5B6167] rb:h-5 rb:line-clamp-1 rb:text-sm rb:leading-5 rb:mb-3">
                               {/* <div className="rb:font-medium rb:w-20">{t('knowledgeBase.description')} </div> */}
                               <Tooltip title={item.description}>
