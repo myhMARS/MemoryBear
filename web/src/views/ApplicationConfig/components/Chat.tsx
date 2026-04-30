@@ -73,11 +73,14 @@ const Chat: FC<ChatProps> = ({
   const [message, setMessage] = useState<string | undefined>(undefined)
   const [features, setFeatures] = useState<FeaturesConfigForm>({} as FeaturesConfigForm)
   const [audioStatusMap, setAudioStatusMap] = useState<Record<string, string>>({})
+  const abortRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     compareLoadingRef.current = false
     setLoading(false)
     return () => {
+      abortRef.current?.()
+      abortRef.current = null
       audioPollingRef.current.forEach(timer => clearInterval(timer))
       audioPollingRef.current.clear()
     }
@@ -85,6 +88,8 @@ const Chat: FC<ChatProps> = ({
 
   useEffect(() => {
     return () => {
+      abortRef.current?.()
+      abortRef.current = null
       audioPollingRef.current.forEach(timer => clearInterval(timer))
       audioPollingRef.current.clear()
     }
@@ -213,17 +218,22 @@ const Chat: FC<ChatProps> = ({
         const modelChatList = [...prev]
         const curModelChat = modelChatList[targetIndex]
         const curChatMsgList = curModelChat.list || []
-        const lastMsg = curChatMsgList[curChatMsgList.length - 2]
-        modelChatList[targetIndex] = {
-          ...modelChatList[targetIndex],
-          list: [
-            ...curChatMsgList.slice(0, curChatMsgList.length - 2),
-            {
-              ...lastMsg,
-              ...(lastMsg.role === 'user' ? { status: 'error' } : { content: null })
-            }
-          ]
+        const lastUserMsg = curChatMsgList[curChatMsgList.length - 2]
+        const lastAssistantMsg = curChatMsgList[curChatMsgList.length - 1]
+
+        if (!lastAssistantMsg.meta_data?.reasoning_content || lastAssistantMsg.meta_data?.reasoning_content.length === 0) {
+          modelChatList[targetIndex] = {
+            ...modelChatList[targetIndex],
+            list: [
+              ...curChatMsgList.slice(0, curChatMsgList.length - 2),
+              {
+                ...lastUserMsg,
+                ...(lastUserMsg.role === 'user' ? { status: 'error' } : { content: null })
+              }
+            ]
+          }
         }
+
         return [...modelChatList]
       }
 
@@ -393,7 +403,7 @@ const Chat: FC<ChatProps> = ({
             parallel: true,
             stream: true,
             timeout: 60,
-          }, handleStreamMessage)
+          }, handleStreamMessage, (abort) => { abortRef.current = abort })
             .catch(() => {
               setLoading(false)
               compareLoadingRef.current = false
@@ -537,7 +547,8 @@ const Chat: FC<ChatProps> = ({
                 }
               }),
             },
-            handleStreamMessage
+            handleStreamMessage,
+            (abort) => { abortRef.current = abort }
           )
             .catch(() => {
               setLoading(false)

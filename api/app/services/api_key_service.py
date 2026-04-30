@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.aioRedis import aio_redis
-from app.models.api_key_model import ApiKey
+from app.models.api_key_model import ApiKey, ApiKeyType
 from app.repositories.api_key_repository import ApiKeyRepository, ApiKeyLogRepository
 from app.schemas import api_key_schema
 from app.schemas.response_schema import PageData, PageMeta
@@ -19,6 +19,7 @@ from app.core.exceptions import (
 )
 from app.core.error_codes import BizCode
 from app.core.logging_config import get_business_logger
+from app.models.app_model import App
 
 logger = get_business_logger()
 
@@ -63,6 +64,12 @@ class ApiKeyService:
                         f"API Key QPS 不能超过套餐上限 {tenant_api_ops_limit}",
                         BizCode.BAD_REQUEST
                     )
+
+            # SERVICE 类型的 resource_id 指向 workspace，非应用，跳过应用发布校验
+            if data.resource_id and data.type != ApiKeyType.SERVICE.value:
+                app = db.get(App, data.resource_id)
+                if not app or not app.current_release_id:
+                    raise BusinessException("该应用未发布", BizCode.APP_NOT_PUBLISHED)
 
             # 生成 API Key
             api_key = generate_api_key(data.type)
@@ -441,6 +448,20 @@ class ApiKeyAuthService:
             return None
 
         return api_key_obj
+
+    @staticmethod
+    def check_app_published(db: Session, api_key_obj: ApiKey) -> None:
+        """
+        检查应用是否已发布，未发布则抛出异常
+        SERVICE 类型的 api_key 不绑定应用（resource_id 指向 workspace），跳过校验
+        """
+        if not api_key_obj.resource_id:
+            return
+        if api_key_obj.type == ApiKeyType.SERVICE.value:
+            return
+        app = db.get(App, api_key_obj.resource_id)
+        if not app or not app.current_release_id:
+            raise BusinessException("应用未发布，不可用", BizCode.APP_NOT_PUBLISHED)
 
     @staticmethod
     def check_scope(api_key: ApiKey, required_scope: str) -> bool:

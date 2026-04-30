@@ -70,6 +70,8 @@ def require_api_key(
                 })
                 raise BusinessException("API Key 无效或已过期", BizCode.API_KEY_INVALID)
 
+            ApiKeyAuthService.check_app_published(db, api_key_obj)
+
             if scopes:
                 missing_scopes = []
                 for scope in scopes:

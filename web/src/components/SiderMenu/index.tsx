@@ -2,7 +2,7 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-02 15:25:31 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-21 15:46:03
+ * @Last Modified time: 2026-04-21 17:56:09
  */
 /**
  * SiderMenu Component
@@ -18,60 +18,61 @@
  * @component
  */
 
-import { useState, useEffect, useRef, type FC } from 'react';
-import { Menu as AntMenu, Layout, Flex } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { Menu as AntMenu, Divider, Flex, Layout } from 'antd';
 import clsx from 'clsx';
+import { useEffect, useRef, useState, type FC } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-import { useMenu, type MenuItem } from '@/store/menu';
-import styles from './index.module.css'
-import logo from '@/assets/images/logo.png'
-import { useUser } from '@/store/user';
 import { getTenantSubscription } from '@/api/user';
-import { useI18n } from '@/store/locale'
-import SubscriptionDetailModal, { type SubscriptionDetailModalRef } from './SubscriptionDetailModal'
+import logo from '@/assets/images/logo.png';
+import { useI18n } from '@/store/locale';
+import { useMenu, type MenuItem } from '@/store/menu';
+import { useUser } from '@/store/user';
+import styles from './index.module.css';
+import SubscriptionDetailModal, { type SubscriptionDetailModalRef } from './SubscriptionDetailModal';
+import SwitchSpaceModal, { type SwitchSpaceModalRef } from './SwitchSpaceModal';
 
 // Import SVG files
 // space
-import dashboardIcon from '@/assets/images/menuNew/dashboard.svg';
-import dashboardActiveIcon from '@/assets/images/menuNew/dashboard_active.svg';
-import applicationIcon from '@/assets/images/menuNew/application.svg';
-import applicationActiveIcon from '@/assets/images/menuNew/application_active.svg';
-import knowledgeIcon from '@/assets/images/menuNew/knowledge.svg';
-import knowledgeActiveIcon from '@/assets/images/menuNew/knowledge_active.svg';
-import memoryIcon from '@/assets/images/menuNew/memory.svg';
-import memoryActiveIcon from '@/assets/images/menuNew/memory_active.svg';
-import userMemoryIcon from '@/assets/images/menuNew/userMemory.svg';
-import userMemoryActiveIcon from '@/assets/images/menuNew/userMemory_active.svg';
-import memoryConversationIcon from '@/assets/images/menuNew/memoryConversation.svg';
-import memoryConversationActiveIcon from '@/assets/images/menuNew/memoryConversation_active.svg';
 import apiKeyIcon from '@/assets/images/menuNew/apiKey.svg';
 import apiKeyActiveIcon from '@/assets/images/menuNew/apiKey_active.svg';
+import applicationIcon from '@/assets/images/menuNew/application.svg';
+import applicationActiveIcon from '@/assets/images/menuNew/application_active.svg';
+import dashboardIcon from '@/assets/images/menuNew/dashboard.svg';
+import dashboardActiveIcon from '@/assets/images/menuNew/dashboard_active.svg';
+import knowledgeIcon from '@/assets/images/menuNew/knowledge.svg';
+import knowledgeActiveIcon from '@/assets/images/menuNew/knowledge_active.svg';
 import memberIcon from '@/assets/images/menuNew/member.svg';
 import memberActiveIcon from '@/assets/images/menuNew/member_active.svg';
-import ontologyIcon from '@/assets/images/menuNew/ontology.svg'
-import ontologyActiveIcon from '@/assets/images/menuNew/ontology_active.svg'
-import spaceConfigIcon from '@/assets/images/menuNew/spaceConfig.svg'
-import spaceConfigActiveIcon from '@/assets/images/menuNew/spaceConfig_active.svg'
-import promptIcon from '@/assets/images/menuNew/prompt.svg'
-import promptActiveIcon from '@/assets/images/menuNew/prompt_active.svg'
+import memoryIcon from '@/assets/images/menuNew/memory.svg';
+import memoryActiveIcon from '@/assets/images/menuNew/memory_active.svg';
+import memoryConversationIcon from '@/assets/images/menuNew/memoryConversation.svg';
+import memoryConversationActiveIcon from '@/assets/images/menuNew/memoryConversation_active.svg';
+import ontologyIcon from '@/assets/images/menuNew/ontology.svg';
+import ontologyActiveIcon from '@/assets/images/menuNew/ontology_active.svg';
+import promptIcon from '@/assets/images/menuNew/prompt.svg';
+import promptActiveIcon from '@/assets/images/menuNew/prompt_active.svg';
+import spaceConfigIcon from '@/assets/images/menuNew/spaceConfig.svg';
+import spaceConfigActiveIcon from '@/assets/images/menuNew/spaceConfig_active.svg';
+import userMemoryIcon from '@/assets/images/menuNew/userMemory.svg';
+import userMemoryActiveIcon from '@/assets/images/menuNew/userMemory_active.svg';
 
 // manage
 import modelIcon from '@/assets/images/menuNew/model.svg';
 import modelActiveIcon from '@/assets/images/menuNew/model_active.svg';
+import pricingIcon from '@/assets/images/menuNew/pricing.svg';
+import pricingActiveIcon from '@/assets/images/menuNew/pricing_active.svg';
+import skillsIcon from '@/assets/images/menuNew/skills.svg';
+import skillsActiveIcon from '@/assets/images/menuNew/skills_active.svg';
 import spaceIcon from '@/assets/images/menuNew/space.svg';
 import spaceActiveIcon from '@/assets/images/menuNew/space_active.svg';
-import userIcon from '@/assets/images/menuNew/user.svg';
-import userActiveIcon from '@/assets/images/menuNew/user_active.svg';
 import toolIcon from '@/assets/images/menuNew/tool.svg';
 import toolActiveIcon from '@/assets/images/menuNew/tool_active.svg';
-import pricingIcon from '@/assets/images/menuNew/pricing.svg'
-import pricingActiveIcon from '@/assets/images/menuNew/pricing_active.svg'
-import skillsIcon from '@/assets/images/menuNew/skills.svg'
-import skillsActiveIcon from '@/assets/images/menuNew/skills_active.svg'
+import userIcon from '@/assets/images/menuNew/user.svg';
+import userActiveIcon from '@/assets/images/menuNew/user_active.svg';
 
 export interface PackagePlan {
   id: string
@@ -174,6 +175,7 @@ const Menu: FC<{
   const [menus, setMenus] = useState<MenuItem[]>([])
   const { user, storageType } = useUser()
   const subscriptionDetailRef = useRef<SubscriptionDetailModalRef>(null)
+  const switchSpaceModalRef = useRef<SwitchSpaceModalRef>(null)
 
   /** Filter menus based on user role and source */
   useEffect(() => {
@@ -346,6 +348,9 @@ const Menu: FC<{
   const handleViewDetail = () => {
     subscriptionDetailRef.current?.handleOpen(subscription)
   }
+  const handleSwitchSpace = () => {
+    switchSpaceModalRef.current?.handleOpen()
+  }
 
   return (
     <Sider
@@ -391,27 +396,38 @@ const Menu: FC<{
         items={menuItems}
         inlineCollapsed={collapsed}
         inlineIndent={10}
-        className={clsx("rb:overflow-y-auto", {
-          'rb:max-h-[calc(100vh-136px)]': user?.is_superuser && source === 'space',
-          'rb:max-h-[calc(100vh-76px)]': !(user?.is_superuser && source === 'space') && !(source === 'manage' && subscription && !collapsed),
-          'rb:max-h-[calc(100vh-228px)]': source === 'manage' && subscription && !collapsed,
-        })}
+        className="rb:overflow-y-auto rb:flex-1!"
       />
       {/* Return to space button for superusers */}
-      {user?.is_superuser && source === 'space' &&
-        <Flex
-          gap={8}
-          align="center"
-          justify="start"
-          onClick={goToSpace}
-          className="rb-border-t rb:pt-5! rb:pb-2.5! rb:absolute rb:bottom-2.5 rb:right-5 rb:left-5 rb:text-[13px] rb:text-[#5B6167] rb:hover:text-[#212332] rb:leading-4.5 rb:font-regular rb:text-center rb:mt-2.25 rb:cursor-pointer"
-        >
-          <div className="rb:cursor-pointer rb:size-4 rb:bg-cover rb:bg-[url('@/assets/images/logout_grey.svg')]"></div>
-          {collapsed ? null : t('common.returnToSpace')}
+      {source === 'space' &&
+        <Flex gap={4} vertical className="rb:my-3! rb:mx-3!">
+          <Divider className="rb:mb-2.5! rb:mt-0! rb:border-[#DFE4ED]! rb:mx-2! rb:min-w-[calc(100%-20px)]! rb:w-[calc(100%-20px)]!" />
+          <Flex
+            gap={8}
+            align="center"
+            justify="start"
+            onClick={handleSwitchSpace}
+            className="rb:p-2.5! rb:text-[13px] rb:hover:bg-[rgba(223,228,237,0.5)] rb:rounded-lg rb:leading-3.5 rb:font-regular rb:text-center rb:cursor-pointer"
+          >
+            <div className="rb:cursor-pointer rb:size-4 rb:bg-cover rb:bg-[url('@/assets/images/menuNew/switch.svg')]"></div>
+            {collapsed ? null : t('common.switchSpace')}
+          </Flex>
+          {user?.is_superuser &&
+            <Flex
+              gap={8}
+              align="center"
+              justify="start"
+              onClick={goToSpace}
+              className="rb:p-2.5! rb:text-[13px] rb:hover:bg-[rgba(223,228,237,0.5)] rb:rounded-lg rb:leading-3.5 rb:font-regular rb:text-center rb:cursor-pointer"
+            >
+              <div className="rb:cursor-pointer rb:size-4 rb:bg-cover rb:bg-[url('@/assets/images/menuNew/return.svg')]"></div>
+              {collapsed ? null : t('common.returnToSpace')}
+            </Flex>
+          }
         </Flex>
       }
       {source === 'manage' && subscription && !collapsed &&
-        <div className="rb:absolute rb:bottom-3 rb:left-3 rb:right-3 rb:py-3 rb:bg-cover rb:bg-[url('@/assets/images/menuNew/package_bg.png')] rb:overflow-hidden rb:rounded-xl">
+        <div className="rb:mb-3 rb:ml-3 rb:mr-3 rb:py-3 rb:bg-cover rb:bg-[url('@/assets/images/menuNew/package_bg.png')] rb:overflow-hidden rb:rounded-xl">
           <div className="rb:h-4.5 rb:flex-1 rb:truncate rb:px-3 rb:text-[13px] rb:font-medium rb:leading-4.5">{subscription.package_plan?.[getKeyWithLanguage('name')]}</div>
 
           <div className="rb:grid rb:grid-cols-4 rb:mt-4">
@@ -433,6 +449,9 @@ const Menu: FC<{
 
       <SubscriptionDetailModal
         ref={subscriptionDetailRef}
+      />
+      <SwitchSpaceModal
+        ref={switchSpaceModalRef}
       />
     </Sider>
   );

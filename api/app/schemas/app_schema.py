@@ -3,7 +3,7 @@ import uuid
 from typing import Optional, Any, List, Dict, Union
 from enum import Enum, StrEnum
 
-from pydantic import BaseModel, Field, ConfigDict, field_serializer, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_serializer, field_validator, model_serializer
 
 from app.schemas.workflow_schema import WorkflowConfigCreate
 
@@ -155,6 +155,10 @@ class FileUploadConfig(BaseModel):
     document_allowed_extensions: List[str] = Field(
         default=["pdf", "docx", "doc", "xlsx", "xls", "txt", "csv", "json", "md"]
     )
+    document_image_recognition: bool = Field(
+        default=False,
+        description="是否识别文档中的图片（需配置视觉模型）"
+    )
     # 视频文件：MP4/MOV/AVI/WebM，最大 500MB
     video_enabled: bool = Field(default=False)
     video_max_size_mb: int = Field(default=50)
@@ -196,6 +200,7 @@ class TextToSpeechConfig(BaseModel):
 class CitationConfig(BaseModel):
     """引用和归属配置"""
     enabled: bool = Field(default=False)
+    allow_download: bool = Field(default=False, description="是否允许下载引用文档")
 
 
 class Citation(BaseModel):
@@ -203,6 +208,7 @@ class Citation(BaseModel):
     file_name: str
     knowledge_id: str
     score: float
+    download_url: Optional[str] = Field(default=None, description="引用文档下载链接（allow_download 开启时返回）")
 
 
 class WebSearchConfig(BaseModel):
@@ -244,7 +250,7 @@ class ModelParameters(BaseModel):
     n: int = Field(default=1, ge=1, le=10, description="生成的回复数量")
     stop: Optional[List[str]] = Field(default=None, description="停止序列")
     deep_thinking: bool = Field(default=False, description="是否启用深度思考模式（需模型支持，如 DeepSeek-R1、QwQ 等）")
-    thinking_budget_tokens: Optional[int] = Field(default=None, ge=1024, le=131072, description="深度思考 token 预算（仅部分模型支持）")
+    thinking_budget_tokens: Optional[int] = Field(default=None, ge=1, le=131072, description="深度思考 token 预算（仅部分模型支持）")
     json_output: bool = Field(default=False, description="是否强制 JSON 格式输出（需模型支持 json_output 能力）")
 
 
@@ -653,11 +659,13 @@ class DraftRunResponse(BaseModel):
     usage: Optional[Dict[str, Any]] = Field(default=None, description="Token 使用情况")
     elapsed_time: Optional[float] = Field(default=None, description="耗时（秒）")
     suggested_questions: List[str] = Field(default_factory=list, description="下一步建议问题")
-    citations: List[CitationSource] = Field(default_factory=list, description="引用来源")
+    citations: List[Dict[str, Any]] = Field(default_factory=list, description="引用来源")
     audio_url: Optional[str] = Field(default=None, description="TTS 语音URL")
+    audio_status: Optional[str] = Field(default=None, description="TTS 语音状态")
 
-    def model_dump(self, **kwargs):
-        data = super().model_dump(**kwargs)
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler):
+        data = handler(self)
         if not data.get("reasoning_content"):
             data.pop("reasoning_content", None)
         return data

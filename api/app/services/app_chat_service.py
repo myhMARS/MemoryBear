@@ -16,7 +16,7 @@ from app.models import MultiAgentConfig, AgentConfig, ModelType
 from app.models import WorkflowConfig
 from app.repositories.tool_repository import ToolRepository
 from app.schemas import DraftRunRequest
-from app.schemas.app_schema import FileInput
+from app.schemas.app_schema import FileInput, FileType
 from app.schemas.model_schema import ModelInfo
 from app.schemas.prompt_schema import render_prompt_message, PromptMessageRole
 from app.services.conversation_service import ConversationService
@@ -107,23 +107,6 @@ class AppChatService:
         # 获取模型参数
         model_parameters = config.model_parameters
 
-        # 创建 LangChain Agent
-        agent = LangChainAgent(
-            model_name=api_key_obj.model_name,
-            api_key=api_key_obj.api_key,
-            provider=api_key_obj.provider,
-            api_base=api_key_obj.api_base,
-            is_omni=api_key_obj.is_omni,
-            temperature=model_parameters.get("temperature", 0.7),
-            max_tokens=model_parameters.get("max_tokens", 2000),
-            system_prompt=system_prompt,
-            tools=tools,
-            deep_thinking=model_parameters.get("deep_thinking", False),
-            thinking_budget_tokens=model_parameters.get("thinking_budget_tokens"),
-            json_output=model_parameters.get("json_output", False),
-            capability=api_key_obj.capability or [],
-        )
-
         model_info = ModelInfo(
             model_name=api_key_obj.model_name,
             provider=api_key_obj.provider,
@@ -165,8 +148,42 @@ class AppChatService:
         processed_files = None
         if files:
             multimodal_service = MultimodalService(self.db, model_info)
-            processed_files = await multimodal_service.process_files(files)
+            fu_config = features_config.get("file_upload", {})
+            if hasattr(fu_config, "model_dump"):
+                fu_config = fu_config.model_dump()
+            doc_img_recognition = isinstance(fu_config, dict) and fu_config.get("document_image_recognition", False)
+            processed_files = await multimodal_service.process_files(
+                files, document_image_recognition=doc_img_recognition,
+                workspace_id=workspace_id
+            )
             logger.info(f"处理了 {len(processed_files)} 个文件")
+            if doc_img_recognition and "vision" in (api_key_obj.capability or []) and any(
+                f.type == FileType.DOCUMENT for f in files
+            ):
+                system_prompt += (
+                    "\n\n文档文字中包含图片位置标记如 [图片 第2页 第1张]: <img src=\"url\"...>，"
+                    "请在回答中用 Markdown 格式 ![图片描述](url) 展示对应图片。"
+                    "重要：图片 URL 中包含 UUID（如 /storage/permanent/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx），"
+                    "必须将 src 属性的值原封不动复制到 Markdown 的括号中，不得增删任何字符。"
+                )
+
+        # 创建 LangChain Agent
+        agent = LangChainAgent(
+            model_name=api_key_obj.model_name,
+            api_key=api_key_obj.api_key,
+            provider=api_key_obj.provider,
+            api_base=api_key_obj.api_base,
+            is_omni=api_key_obj.is_omni,
+            temperature=model_parameters.get("temperature", 0.7),
+            max_tokens=model_parameters.get("max_tokens", 2000),
+            system_prompt=system_prompt,
+            tools=tools,
+            deep_thinking=model_parameters.get("deep_thinking", False),
+            thinking_budget_tokens=model_parameters.get("thinking_budget_tokens"),
+            json_output=model_parameters.get("json_output", False),
+            capability=api_key_obj.capability or [],
+        )
+
         # 为需要运行时上下文的工具注入上下文
         for t in tools:
             if hasattr(t, 'tool_instance') and hasattr(t.tool_instance, 'set_runtime_context'):
@@ -303,7 +320,7 @@ class AppChatService:
             "suggested_questions": suggested_questions,
             "citations": filtered_citations,
             "audio_url": audio_url,
-            "audio_status": "pending"
+            "audio_status": "pending" if audio_url else None
         }
 
     async def agnet_chat_stream(
@@ -379,24 +396,6 @@ class AppChatService:
             # 获取模型参数
             model_parameters = config.model_parameters
 
-            # 创建 LangChain Agent
-            agent = LangChainAgent(
-                model_name=api_key_obj.model_name,
-                api_key=api_key_obj.api_key,
-                provider=api_key_obj.provider,
-                api_base=api_key_obj.api_base,
-                is_omni=api_key_obj.is_omni,
-                temperature=model_parameters.get("temperature", 0.7),
-                max_tokens=model_parameters.get("max_tokens", 2000),
-                system_prompt=system_prompt,
-                tools=tools,
-                streaming=True,
-                deep_thinking=model_parameters.get("deep_thinking", False),
-                thinking_budget_tokens=model_parameters.get("thinking_budget_tokens"),
-                json_output=model_parameters.get("json_output", False),
-                capability=api_key_obj.capability or [],
-            )
-
             model_info = ModelInfo(
                 model_name=api_key_obj.model_name,
                 provider=api_key_obj.provider,
@@ -438,8 +437,43 @@ class AppChatService:
             processed_files = None
             if files:
                 multimodal_service = MultimodalService(self.db, model_info)
-                processed_files = await multimodal_service.process_files(files)
+                fu_config = features_config.get("file_upload", {})
+                if hasattr(fu_config, "model_dump"):
+                    fu_config = fu_config.model_dump()
+                doc_img_recognition = isinstance(fu_config, dict) and fu_config.get("document_image_recognition", False)
+                processed_files = await multimodal_service.process_files(
+                    files, document_image_recognition=doc_img_recognition,
+                    workspace_id=workspace_id
+                )
                 logger.info(f"处理了 {len(processed_files)} 个文件")
+                if doc_img_recognition and "vision" in (api_key_obj.capability or []) and any(
+                    f.type == FileType.DOCUMENT for f in files
+                ):
+                    from langchain.agents import create_agent
+                    system_prompt += (
+                        "\n\n文档文字中包含图片位置标记如 [图片 第2页 第1张]: <img src=\"url\"...>，"
+                        "请在回答中用 Markdown 格式 ![图片描述](url) 展示对应图片。"
+                        "重要：图片 URL 中包含 UUID（如 /storage/permanent/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx），"
+                        "必须将 src 属性的值原封不动复制到 Markdown 的括号中，不得增删任何字符。"
+                    )
+
+            # 创建 LangChain Agent
+            agent = LangChainAgent(
+                model_name=api_key_obj.model_name,
+                api_key=api_key_obj.api_key,
+                provider=api_key_obj.provider,
+                api_base=api_key_obj.api_base,
+                is_omni=api_key_obj.is_omni,
+                temperature=model_parameters.get("temperature", 0.7),
+                max_tokens=model_parameters.get("max_tokens", 2000),
+                system_prompt=system_prompt,
+                tools=tools,
+                streaming=True,
+                deep_thinking=model_parameters.get("deep_thinking", False),
+                thinking_budget_tokens=model_parameters.get("thinking_budget_tokens"),
+                json_output=model_parameters.get("json_output", False),
+                capability=api_key_obj.capability or [],
+            )
 
             # 为需要运行时上下文的工具注入上下文
             for t in tools:

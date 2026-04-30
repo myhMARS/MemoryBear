@@ -2,19 +2,19 @@
  * @Author: ZhaoYing 
  * @Date: 2026-02-03 15:06:18 
  * @Last Modified by: ZhaoYing
- * @Last Modified time: 2026-04-21 11:36:03
+ * @Last Modified time: 2026-04-27 14:07:14
  */
-import LoopNode from './components/Nodes/LoopNode';
-import NormalNode from './components/Nodes/NormalNode';
+import type { ReactShapeConfig } from '@antv/x6-react-shape';
+import type { GroupMetadata, PortMetadata } from '@antv/x6/lib/model/port';
+import AddNode from './components/Nodes/AddNode';
 import ConditionNode from './components/Nodes/ConditionNode';
 import GroupStartNode from './components/Nodes/GroupStartNode';
-import AddNode from './components/Nodes/AddNode'
+import LoopNode from './components/Nodes/LoopNode';
+import NormalNode from './components/Nodes/NormalNode';
 import NoteNode from './components/Nodes/NoteNode';
-import type { PortMetadata, GroupMetadata } from '@antv/x6/lib/model/port';
-import type { ReactShapeConfig } from '@antv/x6-react-shape';
 
-import { memoryConfigListUrl } from '@/api/memory'
-import type { NodeLibrary } from './types'
+import { memoryConfigListUrl } from '@/api/memory';
+import type { NodeLibrary } from './types';
 
 /**
  * Workflow node library configuration
@@ -69,6 +69,15 @@ export const nodeLibrary: NodeLibrary[] = [
           output: {
             type: 'editor',
             required: true,
+          }
+        }
+      },
+      { type: "output", icon: 'rb:bg-[url("@/assets/images/workflow/output.svg")]',
+        config: {
+          outputs: {
+            type: 'mappingList',
+            required: true,
+            isNeedType: true
           }
         }
       },
@@ -939,6 +948,15 @@ export const graphNodeLibrary: Record<string, NodeConfig> = {
     width: nodeWidth,
     height: 120,
     shape: 'notes-node',
+  },
+  output: {
+    width: nodeWidth,
+    height: 76,
+    shape: 'normal-node',
+    ports: {
+      groups: { left: defaultPortGroup },
+      items: [defaultPortItems[0]],
+    },
   }
 }
 
