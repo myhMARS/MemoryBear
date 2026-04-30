@@ -2,6 +2,7 @@ import uuid
 from abc import ABC
 from enum import Enum
 from typing import Any, Optional
+from pydantic import Field
 
 from pydantic import BaseModel, Field
 
@@ -22,6 +23,10 @@ class MessageItem(BaseModel):
     """单条消息结构"""
     role: str
     content: str
+    dialog_at: Optional[str] = Field(
+        None,
+        description="该条消息发生的绝对时间（ISO 8601 格式），不传则使用服务端当前时间",
+    )
     files: Optional[list[dict]] = None
     file_content: Optional[list[Any]] = None
 

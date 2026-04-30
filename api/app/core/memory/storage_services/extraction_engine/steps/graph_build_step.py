@@ -135,7 +135,6 @@ async def build_graph_nodes_and_edges(
             content=dialog_data.context.content if dialog_data.context else "",
             dialog_embedding=dialog_data.dialog_embedding if hasattr(dialog_data, "dialog_embedding") else None,
             created_at=dialog_data.created_at,
-            expired_at=dialog_data.expired_at,
             metadata=dialog_data.metadata,
             config_id=dialog_data.config_id if hasattr(dialog_data, "config_id") else None,
         )
@@ -154,7 +153,6 @@ async def build_graph_nodes_and_edges(
                 chunk_embedding=chunk.chunk_embedding,
                 sequence_number=chunk_idx,
                 created_at=dialog_data.created_at,
-                expired_at=dialog_data.expired_at,
                 metadata=chunk.metadata,
             )
             chunk_nodes.append(chunk_node)
@@ -227,7 +225,7 @@ async def build_graph_nodes_and_edges(
                         else None
                     ),
                     created_at=dialog_data.created_at,
-                    expired_at=dialog_data.expired_at,
+                    dialog_at=getattr(statement, "dialog_at", None),
                     config_id=dialog_data.config_id if hasattr(dialog_data, "config_id") else None,
                     emotion_type=getattr(statement, "emotion_type", None),
                     emotion_intensity=getattr(statement, "emotion_intensity", None),
@@ -280,7 +278,6 @@ async def build_graph_nodes_and_edges(
                             end_user_id=dialog_data.end_user_id,
                             run_id=dialog_data.run_id,
                             created_at=dialog_data.created_at,
-                            expired_at=dialog_data.expired_at,
                             config_id=dialog_data.config_id if hasattr(dialog_data, "config_id") else None,
                         )
                         entity_nodes.append(entity_node)
@@ -320,7 +317,6 @@ async def build_graph_nodes_and_edges(
                                 end_user_id=dialog_data.end_user_id,
                                 run_id=dialog_data.run_id,
                                 created_at=dialog_data.created_at,
-                                expired_at=dialog_data.expired_at,
                                 valid_at=_tv.valid_at if _tv else None,
                                 invalid_at=_tv.invalid_at if _tv else None,
                             )
@@ -382,7 +378,6 @@ async def build_graph_nodes_and_edges(
                 end_user_id=dialog_data.end_user_id,
                 run_id=dialog_data.run_id,
                 created_at=dialog_data.created_at,
-                expired_at=dialog_data.expired_at,
                 pair_id=pair_id,
                 dialog_id=dialog_data.id,
                 text=record["original_text"],
@@ -408,7 +403,6 @@ async def build_graph_nodes_and_edges(
                 end_user_id=dialog_data.end_user_id,
                 run_id=dialog_data.run_id,
                 created_at=dialog_data.created_at,
-                expired_at=dialog_data.expired_at,
                 pair_id=pair_id,
                 dialog_id=dialog_data.id,
                 text=record["pruned_text"],

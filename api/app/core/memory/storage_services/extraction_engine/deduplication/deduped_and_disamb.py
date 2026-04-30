@@ -183,14 +183,8 @@ def _merge_attribute(canonical: ExtractedEntityNode, ent: ExtractedEntityNode):
 
     # 时间范围合并
     try:
-        # 统一使用 created_at / expired_at
         if getattr(ent, "created_at", None) and getattr(canonical, "created_at", None) and ent.created_at < canonical.created_at:
             canonical.created_at = ent.created_at
-        if getattr(ent, "expired_at", None) and getattr(canonical, "expired_at", None):
-            if canonical.expired_at is None:
-                canonical.expired_at = ent.expired_at
-            elif ent.expired_at and ent.expired_at > canonical.expired_at:
-                canonical.expired_at = ent.expired_at
     except Exception:
         pass
 

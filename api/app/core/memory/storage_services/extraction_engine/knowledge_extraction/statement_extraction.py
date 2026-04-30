@@ -181,6 +181,7 @@ class StatementExtractor:
                     chunk_id=chunk.id,
                     end_user_id=end_user_id,
                     speaker=chunk_speaker,
+                    dialog_at=getattr(chunk, "dialog_at", None),
                     has_unsolved_reference=getattr(extracted_stmt, "has_unsolved_reference", False),
                 )
                 

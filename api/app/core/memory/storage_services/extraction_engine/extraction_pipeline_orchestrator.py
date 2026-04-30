@@ -912,6 +912,7 @@ class NewExtractionOrchestrator:
                         has_emotional_state=stmt_out.has_emotional_state,
                         triplet_extraction_info=triplet_info,
                         statement_embedding=stmt_embedding,
+                        dialog_at=getattr(chunk, "dialog_at", None),
                         **emotion_kwargs,
                     )
                     new_statements.append(stmt)

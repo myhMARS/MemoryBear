@@ -215,7 +215,6 @@ async def _process_chunk_summary(
             apply_id=dialog.end_user_id,
             run_id=dialog.run_id,  # 使用 dialog 的 run_id
             created_at=datetime.now(),
-            expired_at=datetime(9999, 12, 31),
             dialog_id=dialog.id,
             chunk_ids=[chunk.id],
             content=summary_text,

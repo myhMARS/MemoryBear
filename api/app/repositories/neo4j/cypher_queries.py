@@ -8,7 +8,6 @@ DIALOGUE_NODE_SAVE = """
         n.run_id = dialogue.run_id,
         n.ref_id = dialogue.ref_id,
         n.created_at = dialogue.created_at,
-        n.expired_at = dialogue.expired_at,
         n.content = dialogue.content,
         n.dialog_embedding = dialogue.dialog_embedding
     RETURN n.id AS uuid
@@ -32,7 +31,6 @@ SET s += {
     emotion_keywords: statement.emotion_keywords,
     temporal_info: statement.temporal_info,
     created_at: statement.created_at,
-    expired_at: statement.expired_at,
     valid_at: coalesce(statement.valid_at, ""),
     invalid_at: coalesce(statement.invalid_at, ""),
     statement_embedding: statement.statement_embedding,
@@ -41,7 +39,8 @@ SET s += {
     activation_value: statement.activation_value,
     access_history: statement.access_history,
     last_access_time: statement.last_access_time,
-    access_count: statement.access_count
+    access_count: statement.access_count,
+    dialog_at: statement.dialog_at
 }
 RETURN s.id AS uuid
 """
@@ -64,7 +63,6 @@ SET c += {
     end_user_id: chunk.end_user_id,
     run_id: chunk.run_id,
     created_at: chunk.created_at,
-    expired_at: chunk.expired_at,
     dialog_id: chunk.dialog_id,
     content: chunk.content,
     speaker: chunk.speaker,
@@ -87,9 +85,6 @@ SET e.name = CASE WHEN entity.name IS NOT NULL AND entity.name <> '' THEN entity
     e.created_at = CASE
         WHEN entity.created_at IS NOT NULL AND (e.created_at IS NULL OR entity.created_at < e.created_at)
         THEN entity.created_at ELSE e.created_at END,
-    e.expired_at = CASE
-        WHEN entity.expired_at IS NOT NULL AND (e.expired_at IS NULL OR entity.expired_at > e.expired_at)
-        THEN entity.expired_at ELSE e.expired_at END,
     e.entity_idx = CASE WHEN e.entity_idx IS NULL OR e.entity_idx = 0 THEN entity.entity_idx ELSE e.entity_idx END,
     e.entity_type = CASE WHEN entity.entity_type IS NOT NULL AND entity.entity_type <> '' THEN entity.entity_type ELSE e.entity_type END,
     e.type_description = CASE WHEN entity.type_description IS NOT NULL AND entity.type_description <> '' THEN entity.type_description ELSE coalesce(e.type_description, '') END,
@@ -214,11 +209,60 @@ SET r.predicate = rel.predicate,
     r.valid_at = coalesce(rel.valid_at, ""),
     r.invalid_at = coalesce(rel.invalid_at, ""),
     r.created_at = rel.created_at,
-    r.expired_at = rel.expired_at,
     r.run_id = rel.run_id,
     r.end_user_id = rel.end_user_id
 RETURN elementId(r) AS uuid
 """
+
+# 在 Neo4j 5及后续版本中，id() 函数已被标记为弃用，用elementId() 函数替代
+
+# 保存弱关系实体，设置 e.is_weak = true；不维护 e.relations 聚合字段
+WEAK_ENTITY_NODE_SAVE = """
+UNWIND $weak_entities AS entity
+MERGE (e:ExtractedEntity {id: entity.id, run_id: entity.run_id})
+SET e += {
+    name: entity.name,
+    end_user_id: entity.end_user_id,
+    run_id: entity.run_id,
+    description: entity.description,
+    chunk_id: entity.chunk_id,
+    dialog_id: entity.dialog_id
+}
+// Independent weak flag，仅标记弱关系，不再维护 relations 聚合字段
+SET e.is_weak = true
+RETURN e.id AS id
+"""
+
+# 为强关系三元组中的主语和宾语创建/更新实体节点，仅设置 e.is_strong = true，不维护 e.relations 字段
+SAVE_STRONG_TRIPLE_ENTITIES = """
+UNWIND $items AS item
+MERGE (s:ExtractedEntity {id: item.source_id, run_id: item.run_id})
+SET s += {name: item.subject, end_user_id: item.end_user_id, run_id: item.run_id}
+// Independent strong flag
+SET s.is_strong = true
+MERGE (o:ExtractedEntity {id: item.target_id, run_id: item.run_id})
+SET o += {name: item.object, end_user_id: item.end_user_id, run_id: item.run_id}
+// Independent strong flag
+SET o.is_strong = true
+"""
+
+
+DIALOGUE_STATEMENT_EDGE_SAVE = """
+    UNWIND $dialogue_statement_edges AS edge
+    // 支持按 uuid 或 ref_id 连接到 Dialogue，避免因来源 ID 不一致而断链
+    MATCH (dialogue:Dialogue)
+    WHERE dialogue.uuid = edge.source OR dialogue.ref_id = edge.source
+    MATCH (statement:Statement {id: edge.target})
+    // 仅按端点去重，关系属性可更新
+    MERGE (dialogue)-[e:MENTIONS]->(statement)
+    SET e.uuid = edge.id,
+        e.end_user_id = edge.end_user_id,
+        e.created_at = edge.created_at
+    RETURN e.uuid AS uuid
+"""
+
+# 在 Neo4j 5及后续版本中，id() 函数已被标记为弃用，用elementId() 函数替代
+
 
 CHUNK_STATEMENT_EDGE_SAVE = """
     UNWIND $chunk_statement_edges AS edge
@@ -227,8 +271,7 @@ CHUNK_STATEMENT_EDGE_SAVE = """
     MERGE (chunk)-[e:CONTAINS {id: edge.id}]->(statement)
     SET e.end_user_id = edge.end_user_id,
         e.run_id = edge.run_id,
-        e.created_at = edge.created_at,
-        e.expired_at = edge.expired_at
+        e.created_at = edge.created_at
     RETURN e.id AS uuid
 """
 
@@ -243,11 +286,89 @@ MERGE (statement)-[r:REFERENCES_ENTITY]->(entity)
 SET r.end_user_id = rel.end_user_id,
     r.run_id = rel.run_id,
     r.created_at = rel.created_at,
-    r.expired_at = rel.expired_at,
     r.connect_strength = rel.connect_strength
 RETURN elementId(r) AS uuid
 """
 
+ENTITY_EMBEDDING_SEARCH = """
+CALL db.index.vector.queryNodes('entity_embedding_index', $limit * 100, $embedding)
+YIELD node AS e, score
+WHERE e.name_embedding IS NOT NULL
+  AND ($end_user_id IS NULL OR e.end_user_id = $end_user_id)
+RETURN e.id AS id,
+       e.name AS name,
+       e.end_user_id AS end_user_id,
+       e.entity_type AS entity_type,
+       COALESCE(e.activation_value, e.importance_score, 0.5) AS activation_value,
+       COALESCE(e.importance_score, 0.5) AS importance_score,
+       e.last_access_time AS last_access_time,
+       COALESCE(e.access_count, 0) AS access_count,
+       score
+ORDER BY score DESC
+LIMIT $limit
+"""
+# Embedding-based search: cosine similarity on Statement.statement_embedding
+STATEMENT_EMBEDDING_SEARCH = """
+CALL db.index.vector.queryNodes('statement_embedding_index', $limit * 100, $embedding)
+YIELD node AS s, score
+WHERE s.statement_embedding IS NOT NULL
+  AND ($end_user_id IS NULL OR s.end_user_id = $end_user_id)
+RETURN s.id AS id,
+       s.statement AS statement,
+       s.end_user_id AS end_user_id,
+       s.chunk_id AS chunk_id,
+       s.created_at AS created_at,
+       s.valid_at AS valid_at,
+       s.invalid_at AS invalid_at,
+       COALESCE(s.activation_value, s.importance_score, 0.5) AS activation_value,
+       COALESCE(s.importance_score, 0.5) AS importance_score,
+       s.last_access_time AS last_access_time,
+       COALESCE(s.access_count, 0) AS access_count,
+       score
+ORDER BY score DESC
+LIMIT $limit
+"""
+
+# Embedding-based search: cosine similarity on Chunk.chunk_embedding
+CHUNK_EMBEDDING_SEARCH = """
+CALL db.index.vector.queryNodes('chunk_embedding_index', $limit * 100, $embedding)
+YIELD node AS c, score
+WHERE c.chunk_embedding IS NOT NULL
+  AND ($end_user_id IS NULL OR c.end_user_id = $end_user_id)
+RETURN c.id AS chunk_id,
+       c.end_user_id AS end_user_id,
+       c.content AS content,
+       c.dialog_id AS dialog_id,
+       COALESCE(c.activation_value, 0.5) AS activation_value,
+       c.last_access_time AS last_access_time,
+       COALESCE(c.access_count, 0) AS access_count,
+       score
+ORDER BY score DESC
+LIMIT $limit
+"""
+
+SEARCH_STATEMENTS_BY_KEYWORD = """
+CALL db.index.fulltext.queryNodes("statementsFulltext", $query) YIELD node AS s, score
+WHERE ($end_user_id IS NULL OR s.end_user_id = $end_user_id)
+OPTIONAL MATCH (c:Chunk)-[:CONTAINS]->(s)
+OPTIONAL MATCH (s)-[:REFERENCES_ENTITY]->(e:ExtractedEntity)
+RETURN s.id AS id,
+       s.statement AS statement,
+       s.end_user_id AS end_user_id,
+       s.chunk_id AS chunk_id,
+       s.created_at AS created_at,
+       s.valid_at AS valid_at,
+       s.invalid_at AS invalid_at,
+       c.id AS chunk_id_from_rel,
+       collect(DISTINCT e.id) AS entity_ids,
+       COALESCE(s.activation_value, s.importance_score, 0.5) AS activation_value,
+       COALESCE(s.importance_score, 0.5) AS importance_score,
+       s.last_access_time AS last_access_time,
+       COALESCE(s.access_count, 0) AS access_count,
+       score
+ORDER BY score DESC
+LIMIT $limit
+"""
 # 查询实体名称包含指定字符串的实体
 SEARCH_ENTITIES_BY_NAME = """
 CALL db.index.fulltext.queryNodes("entitiesFulltext", $query) YIELD node AS e, score
@@ -259,7 +380,6 @@ RETURN e.id AS id,
        e.end_user_id AS end_user_id,
        e.entity_type AS entity_type,
        e.created_at AS created_at,
-       e.expired_at AS expired_at,
        e.entity_idx AS entity_idx,
        e.statement_id AS statement_id,
        e.description AS description,
@@ -274,6 +394,72 @@ RETURN e.id AS id,
        COALESCE(e.importance_score, 0.5) AS importance_score,
        e.last_access_time AS last_access_time,
        COALESCE(e.access_count, 0) AS access_count,
+       score
+ORDER BY score DESC
+LIMIT $limit
+"""
+
+SEARCH_ENTITIES_BY_NAME_OR_ALIAS = """
+CALL db.index.fulltext.queryNodes("entitiesFulltext", $query) YIELD node AS e, score
+WHERE ($end_user_id IS NULL OR e.end_user_id = $end_user_id)
+WITH e, score
+With collect({entity: e, score: score}) AS fulltextResults
+
+OPTIONAL MATCH (ae:ExtractedEntity)
+WHERE ($end_user_id IS NULL OR ae.end_user_id = $end_user_id)
+  AND ae.aliases IS NOT NULL
+  AND ANY(alias IN ae.aliases WHERE toLower(alias) CONTAINS toLower($query))
+WITH fulltextResults, collect(ae) AS aliasEntities
+
+UNWIND (fulltextResults + [x IN aliasEntities | {entity: x, score:
+     CASE 
+       WHEN ANY(alias IN x.aliases WHERE toLower(alias) = toLower($query)) THEN 1.0
+       WHEN ANY(alias IN x.aliases WHERE toLower(alias) STARTS WITH toLower($query)) THEN 0.9
+       ELSE 0.8
+     END
+}]) AS row
+WITH row.entity AS e, row.score AS score
+WITH DISTINCT e, MAX(score) AS score
+OPTIONAL MATCH (s:Statement)-[:REFERENCES_ENTITY]->(e)
+OPTIONAL MATCH (c:Chunk)-[:CONTAINS]->(s)
+RETURN e.id AS id,
+       e.name AS name,
+       e.end_user_id AS end_user_id,
+       e.entity_type AS entity_type,
+       e.created_at AS created_at,
+       e.entity_idx AS entity_idx,
+       e.statement_id AS statement_id,
+       e.description AS description,
+       e.aliases AS aliases,
+       e.name_embedding AS name_embedding,
+       e.connect_strength AS connect_strength,
+       collect(DISTINCT s.id) AS statement_ids,
+       collect(DISTINCT c.id) AS chunk_ids,
+       COALESCE(e.activation_value, e.importance_score, 0.5) AS activation_value,
+       COALESCE(e.importance_score, 0.5) AS importance_score,
+       e.last_access_time AS last_access_time,
+       COALESCE(e.access_count, 0) AS access_count,
+       score
+ORDER BY score DESC
+LIMIT $limit
+"""
+
+
+SEARCH_CHUNKS_BY_CONTENT = """
+CALL db.index.fulltext.queryNodes("chunksFulltext", $query) YIELD node AS c, score
+WHERE ($end_user_id IS NULL OR c.end_user_id = $end_user_id)
+OPTIONAL MATCH (c)-[:CONTAINS]->(s:Statement)
+OPTIONAL MATCH (s)-[:REFERENCES_ENTITY]->(e:ExtractedEntity)
+RETURN c.id AS chunk_id,
+       c.end_user_id AS end_user_id,
+       c.content AS content,
+       c.dialog_id AS dialog_id,
+       c.sequence_number AS sequence_number,
+       collect(DISTINCT s.id) AS statement_ids,
+       collect(DISTINCT e.id) AS entity_ids,
+       COALESCE(c.activation_value, 0.5) AS activation_value,
+       c.last_access_time AS last_access_time,
+       COALESCE(c.access_count, 0) AS access_count,
        score
 ORDER BY score DESC
 LIMIT $limit
@@ -332,8 +518,7 @@ WHERE ($end_user_id IS NULL OR d.end_user_id = $end_user_id)
 RETURN d.id AS dialog_id,
        d.end_user_id AS end_user_id,
        d.content AS content,
-       d.created_at AS created_at,
-       d.expired_at AS expired_at
+       d.created_at AS created_at
 ORDER BY d.created_at DESC
 LIMIT $limit
 """
@@ -347,7 +532,6 @@ RETURN c.id AS chunk_id,
        c.content AS content,
        c.dialog_id AS dialog_id,
        c.created_at AS created_at,
-       c.expired_at AS expired_at,
        c.sequence_number AS sequence_number
 ORDER BY c.created_at DESC
 LIMIT $limit
@@ -560,7 +744,6 @@ SET m += {
     end_user_id: summary.end_user_id,
     run_id: summary.run_id,
     created_at: summary.created_at,
-    expired_at: summary.expired_at,
     dialog_id: summary.dialog_id,
     chunk_ids: summary.chunk_ids,
     content: summary.content,
@@ -584,8 +767,7 @@ MATCH (c)-[:CONTAINS]->(s:Statement {run_id: e.run_id})
 MERGE (ms)-[r:DERIVED_FROM_STATEMENT]->(s)
 SET r.end_user_id = e.end_user_id,
     r.run_id = e.run_id,
-    r.created_at = e.created_at,
-    r.expired_at = e.expired_at
+    r.created_at = e.created_at
 RETURN elementId(r) AS uuid
 """
 
@@ -614,8 +796,7 @@ FOREACH (rel IN CASE WHEN r IS NOT NULL THEN [r] ELSE [] END |
         user_id: rel.user_id,
         apply_id: rel.apply_id,
         run_id: rel.run_id,
-        created_at: rel.created_at,
-        expired_at: rel.expired_at
+        created_at: rel.created_at
     }]->(target)
 )
 
@@ -636,8 +817,7 @@ FOREACH (rel IN CASE WHEN r IS NOT NULL THEN [r] ELSE [] END |
         user_id: rel.user_id,
         apply_id: rel.apply_id,
         run_id: rel.run_id,
-        created_at: rel.created_at,
-        expired_at: rel.expired_at
+        created_at: rel.created_at
     }]->(canonical)
 )
 
@@ -678,7 +858,6 @@ neo4j_query_part = """
             m.description as description,
             m.statement_id as statement_id,
             m.created_at as created_at,
-            m.expired_at as expired_at,
             CASE WHEN rel IS NULL THEN "NO_RELATIONSHIP" ELSE type(rel) END as relationship_type,
               elementId(rel) as rel_id,
             rel.predicate as predicate,
@@ -698,7 +877,6 @@ neo4j_query_all = """
                 m.description as description,
                 m.statement_id as statement_id,
                 m.created_at as created_at,
-                m.expired_at as expired_at,
                 CASE WHEN rel IS NULL THEN "NO_RELATIONSHIP" ELSE type(rel) END as relationship_type,
                   elementId(rel) as rel_id,
                 rel.predicate as predicate,

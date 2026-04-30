@@ -55,7 +55,6 @@ async def save_entities_and_relationships(
             'valid_at': edge.valid_at.isoformat() if edge.valid_at else None,
             'invalid_at': edge.invalid_at.isoformat() if edge.invalid_at else None,
             'created_at': edge.created_at.isoformat() if edge.created_at else None,
-            'expired_at': edge.expired_at.isoformat() if edge.expired_at else None,
             'run_id': edge.run_id,
             'end_user_id': edge.end_user_id,
         }
@@ -115,7 +114,6 @@ async def save_statement_chunk_edges(
             "end_user_id": edge.end_user_id,
             "run_id": edge.run_id,
             "created_at": edge.created_at.isoformat() if edge.created_at else None,
-            "expired_at": edge.expired_at.isoformat() if edge.expired_at else None,
         })
 
     try:
@@ -145,7 +143,6 @@ async def save_statement_entity_edges(
             "run_id": edge.run_id,
             "connect_strength": edge.connect_strength,
             "created_at": edge.created_at.isoformat() if edge.created_at else None,
-            "expired_at": edge.expired_at.isoformat() if edge.expired_at else None,
         }
         all_se_edges.append(edge_data)
 
@@ -313,7 +310,6 @@ async def save_dialog_and_statements_to_neo4j(
                     'valid_at': edge.valid_at.isoformat() if edge.valid_at else None,
                     'invalid_at': edge.invalid_at.isoformat() if edge.invalid_at else None,
                     'created_at': edge.created_at.isoformat() if edge.created_at else None,
-                    'expired_at': edge.expired_at.isoformat() if edge.expired_at else None,
                     'run_id': edge.run_id,
                     'end_user_id': edge.end_user_id,
                 })
@@ -332,7 +328,6 @@ async def save_dialog_and_statements_to_neo4j(
                     "source": edge.source,
                     "target": edge.target,
                     "created_at": edge.created_at.isoformat() if edge.created_at else None,
-                    "expired_at": edge.expired_at.isoformat() if edge.expired_at else None,
                     "run_id": edge.run_id,
                     "end_user_id": edge.end_user_id,
                 })
@@ -350,7 +345,6 @@ async def save_dialog_and_statements_to_neo4j(
                     "source": edge.source,
                     "target": edge.target,
                     "created_at": edge.created_at.isoformat() if edge.created_at else None,
-                    "expired_at": edge.expired_at.isoformat() if edge.expired_at else None,
                     "run_id": edge.run_id,
                     "end_user_id": edge.end_user_id,
                     "connect_strength": getattr(edge, "connect_strength", "strong"),

@@ -62,7 +62,7 @@ class MemoryService:
         """写入记忆：对话 → 萃取 → 存储 → 聚类 → 摘要
 
         Args:
-            messages: 结构化消息 [{"role": "user"/"assistant", "content": "..."}]
+            messages: 结构化消息 [{"role": "user"/"assistant", "content": "...", "dialog_at": "..."}]
             language: 语言 ("zh" | "en")
             ref_id: 引用 ID，为空则自动生成
             is_pilot_run: 试运行模式（只萃取不写入）

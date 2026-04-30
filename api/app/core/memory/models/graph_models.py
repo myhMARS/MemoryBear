@@ -106,7 +106,6 @@ class Edge(BaseModel):
         end_user_id: End user ID for multi-tenancy
         run_id: Unique identifier for the pipeline run that created this edge
         created_at: Timestamp when the edge was created (system perspective)
-        expired_at: Optional timestamp when the edge expires (system perspective)
     """
     id: str = Field(default_factory=lambda: uuid4().hex, description="A unique identifier for the edge.")
     source: str = Field(..., description="The ID of the source node.")
@@ -114,7 +113,6 @@ class Edge(BaseModel):
     end_user_id: str = Field(..., description="The end user ID of the edge.")
     run_id: str = Field(default_factory=lambda: uuid4().hex, description="Unique identifier for this pipeline run.")
     created_at: datetime = Field(..., description="The valid time of the edge from system perspective.")
-    expired_at: Optional[datetime] = Field(default=None, description="The expired time of the edge from system perspective.")
 
 
 class ChunkEdge(Edge):
@@ -191,14 +189,12 @@ class Node(BaseModel):
         end_user_id: End user ID for multi-tenancy
         run_id: Unique identifier for the pipeline run that created this node
         created_at: Timestamp when the node was created (system perspective)
-        expired_at: Optional timestamp when the node expires (system perspective)
     """
     id: str = Field(..., description="The unique identifier for the node.")
     name: str = Field(..., description="The name of the node.")
     end_user_id: str = Field(..., description="The end user ID of the node.")
     run_id: str = Field(default_factory=lambda: uuid4().hex, description="Unique identifier for this pipeline run.")
     created_at: datetime = Field(..., description="The valid time of the node from system perspective.")
-    expired_at: Optional[datetime] = Field(None, description="The expired time of the node from system perspective.")
 
 
 class DialogueNode(Node):
@@ -284,6 +280,7 @@ class StatementNode(Node):
     temporal_info: TemporalInfo = Field(..., description="Temporal information")
     valid_at: Optional[datetime] = Field(None, description="Temporal validity start")
     invalid_at: Optional[datetime] = Field(None, description="Temporal validity end")
+    dialog_at: Optional[datetime] = Field(None, description="Absolute timestamp of the conversation this statement belongs to")
 
     # Embedding and other fields
     statement_embedding: Optional[List[float]] = Field(None, description="Statement embedding vector")
@@ -319,7 +316,7 @@ class StatementNode(Node):
         description="Total number of times this node has been accessed"
     )
 
-    @field_validator('valid_at', 'invalid_at', mode='before')
+    @field_validator('valid_at', 'invalid_at', 'dialog_at', mode='before')
     @classmethod
     def validate_datetime(cls, v):
         """使用通用的历史日期解析函数"""

@@ -18,7 +18,7 @@ async def get_chunked_dialogs(
     Args:
         chunker_strategy: The chunking strategy to use (default: RecursiveChunker)
         end_user_id: Group identifier
-        messages: Structured message list [{"role": "user", "content": "..."}, ...]
+        messages: Structured message list [{"role": "user", "content": "...", "dialog_at": "..."}]
         ref_id: Reference identifier
         config_id: Configuration ID for processing (used to load pruning config)
         snapshot: Optional PipelineSnapshot instance for saving pruning output
@@ -47,7 +47,12 @@ async def get_chunked_dialogs(
             raise ValueError(f"Message {idx} role must be 'user' or 'assistant', got: {role}")
 
         if content.strip():
-            conversation_messages.append(ConversationMessage(role=role, msg=content.strip(), files=files))
+            conversation_messages.append(ConversationMessage(
+                role=role,
+                msg=content.strip(),
+                dialog_at=msg.get("dialog_at"),
+                files=files,
+            ))
 
     if not conversation_messages:
         raise ValueError("Message list cannot be empty after filtering")
@@ -57,7 +62,7 @@ async def get_chunked_dialogs(
         context=conversation_context,
         ref_id=ref_id,
         end_user_id=end_user_id,
-        config_id=config_id
+        config_id=config_id,
     )
     
 # step2: 语义剪枝步骤（在分块之前）

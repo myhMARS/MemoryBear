@@ -457,7 +457,9 @@ class MemoryAgentService:
 
         if use_new_pipeline:
             service = MemoryService(memory_config=memory_config, end_user_id=end_user_id)
-            result = await service.write(messages=messages_dict, language=language, ref_id='')
+            result = await service.write(
+                messages=messages_dict, language=language, ref_id='',
+            )
             logger.info(
                 f"[NewPipeline] 完成: status={result.status}, "
                 f"elapsed={result.elapsed_seconds:.2f}s, "

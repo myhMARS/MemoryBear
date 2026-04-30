@@ -1089,7 +1089,6 @@ class ExtractionOrchestrator:
                 content=dialog_data.context.content if dialog_data.context else "",
                 dialog_embedding=dialog_data.dialog_embedding if hasattr(dialog_data, 'dialog_embedding') else None,
                 created_at=dialog_data.created_at,
-                expired_at=dialog_data.expired_at,
                 metadata=dialog_data.metadata,
                 config_id=dialog_data.config_id if hasattr(dialog_data, 'config_id') else None,
             )
@@ -1109,7 +1108,6 @@ class ExtractionOrchestrator:
                     chunk_embedding=chunk.chunk_embedding,
                     sequence_number=chunk_idx,  # 添加必需的 sequence_number 字段
                     created_at=dialog_data.created_at,
-                    expired_at=dialog_data.expired_at,
                     metadata=chunk.metadata,
                 )
                 chunk_nodes.append(chunk_node)
@@ -1175,7 +1173,6 @@ class ExtractionOrchestrator:
                         invalid_at=statement.temporal_validity.invalid_at if hasattr(statement,
                                                                                      'temporal_validity') and statement.temporal_validity else None,
                         created_at=dialog_data.created_at,
-                        expired_at=dialog_data.expired_at,
                         config_id=dialog_data.config_id if hasattr(dialog_data, 'config_id') else None,
                         # Emotion fields
                         emotion_type=getattr(statement, 'emotion_type', None),
@@ -1232,7 +1229,6 @@ class ExtractionOrchestrator:
                                     end_user_id=dialog_data.end_user_id,
                                     run_id=dialog_data.run_id,  # 使用 dialog_data 的 run_id
                                     created_at=dialog_data.created_at,
-                                    expired_at=dialog_data.expired_at,
                                     config_id=dialog_data.config_id if hasattr(dialog_data, 'config_id') else None,
                                 )
                                 entity_nodes.append(entity_node)
@@ -1269,7 +1265,6 @@ class ExtractionOrchestrator:
                                     end_user_id=dialog_data.end_user_id,
                                     run_id=dialog_data.run_id,  # 使用 dialog_data 的 run_id
                                     created_at=dialog_data.created_at,
-                                    expired_at=dialog_data.expired_at,
                                     valid_at=_tv.valid_at if _tv else None,
                                     invalid_at=_tv.invalid_at if _tv else None,
                                 )

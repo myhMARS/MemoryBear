@@ -198,11 +198,13 @@ class WritePipeline:
                     chunked_dialogs = await self._preprocess(messages, ref_id)
                     s.metadata(chunks=sum(len(d.chunks) for d in chunked_dialogs))
 
-                # Step 2: 萃取 - 知识提取
+                # Step 2: 萃取 - 知识提取 + 第一层去重 + 别名归并（内存侧）
                 async with bear.step(2, 5, "萃取", "知识提取") as s:
                     extraction_result = await self._extract(
                         chunked_dialogs, is_pilot_run
                     )
+                    # 别名归并（内存侧）：在写入前完成，确保写入的数据已归并
+                    self._merge_alias_in_memory(extraction_result)
                     stats = extraction_result.stats
                     s.metadata(
                         entities=stats["entity_count"],
@@ -222,15 +224,8 @@ class WritePipeline:
                 async with bear.step(3, 5, "存储", "写入 Neo4j"):
                     await self._store(extraction_result)
 
-                # Step 3.2: 别名归并
-                async with bear.step(3, 5, "别名归并", "处理别名属于关系"):
-                    await self._merge_alias_belongs_to(extraction_result)
-
-                # Step 3.5: 异步情绪提取（fire-and-forget，需在 _store 之后确保 Statement 节点已存在）
-                await self._extract_emotion(getattr(self, "_emotion_statements", []))
-
-                # Step 3.6: 异步元数据提取（fire-and-forget，需在 _store 之后确保 Entity 节点已存在）
-                await self._extract_metadata(extraction_result)
+                # Step 3.5: 异步后处理（别名归并 Neo4j 侧 + 第二层去重 + 情绪 + 元数据）
+                await self._post_store_async_tasks(extraction_result)
 
                 # Step 4: 聚类 - 增量更新社区（异步，不阻塞）
                 async with bear.step(4, 5, "聚类", "增量更新社区") as s:
@@ -359,16 +354,17 @@ class WritePipeline:
         # Snapshot: 图节点和边（去重前）
         recorder.record_graph_before_dedup(graph)
 
-        # step3: 两阶段去重消歧
+        # step3: 第一层去重消歧（同一轮对话内的实体碎片合并）
+        # 第二层（Neo4j 联合去重）后移到 _store 之后异步执行
         dedup_result = await run_dedup(
             entity_nodes=graph.entity_nodes,
             statement_entity_edges=graph.stmt_entity_edges,
             entity_entity_edges=graph.entity_entity_edges,
             dialog_data_list=dialog_data_list,
             pipeline_config=pipeline_config,
-            connector=self._neo4j_connector,
+            connector=None,
             llm_client=self._llm_client,
-            is_pilot_run=is_pilot_run,
+            is_pilot_run=True,
             progress_callback=self.progress_callback,
         )
 
@@ -455,29 +451,21 @@ class WritePipeline:
                     raise
 
     # ──────────────────────────────────────────────
-    # Step 3.2: 别名归并
+    # Step 3.2: 别名归并（内存侧）
     # ──────────────────────────────────────────────
 
-    async def _merge_alias_belongs_to(self, result: ExtractionResult) -> None:
+    def _merge_alias_in_memory(self, result: ExtractionResult) -> None:
+        """别名归并（内存侧）：处理 predicate="别名属于" 的边。
+
+        在写入 Neo4j 之前执行，确保写入的数据已经完成别名归并：
+        - 将别名实体的 name 追加到目标实体的 aliases
+        - 将别名实体的 description 拼接到目标实体的 description
+        - 重定向指向别名节点的边到目标节点
+
+        纯内存操作，不涉及 Neo4j。
         """
-        所有去重合并都可以使用这个这种统一的处理方式（未实现）
-        别名归并：处理 predicate="别名属于" 的 EXTRACTED_RELATIONSHIP 边。
-
-        对每条 source -[EXTRACTED_RELATIONSHIP {predicate:"别名属于"}]-> target 边：
-        - 将 source.name 追加到 target.aliases（去重）
-        - 将 source.description append 进 target.description_list（list 形式）
-
-        同时在内存中同步更新 ExtractionResult.entity_nodes，保持内存与 Neo4j 一致。
-        失败不中断主流程。
-        """
-        from app.repositories.neo4j.cypher_queries import (
-            MERGE_ALIAS_BELONGS_TO,
-            REDIRECT_ALIAS_EDGES,
-        )
-
         ALIAS_PREDICATE = "别名属于"
 
-        # 筛选出所有 predicate="别名属于" 的边
         alias_edges = [
             e
             for e in result.entity_entity_edges
@@ -490,10 +478,7 @@ class WritePipeline:
             return
 
         try:
-            # ── 1. 在内存中同步更新 entity_nodes ──
             entity_map = {e.id: e for e in result.entity_nodes}
-
-            # 构建 alias_id → target_id 映射（别名节点 → 用户节点）
             alias_to_target: dict[str, str] = {}
 
             for edge in alias_edges:
@@ -513,7 +498,7 @@ class WritePipeline:
                             source_name
                         ]
 
-                # 将 source.description append 进 target.description（追加，分号分隔）
+                # 将 source.description 拼接到 target.description（分号分隔，去重）
                 src_desc = (source_node.description or "").strip()
                 if src_desc:
                     tgt_desc = (target_node.description or "").strip()
@@ -522,12 +507,11 @@ class WritePipeline:
                             f"{tgt_desc}；{src_desc}" if tgt_desc else src_desc
                         )
 
-            # ── 1.1 内存中重定向指向别名节点的边到用户节点 ──
+            # 重定向指向别名节点的边到目标节点
             alias_ids = set(alias_to_target.keys())
             redirected_ee_count = 0
             redirected_se_count = 0
 
-            # 重定向 entity_entity_edges（排除"别名属于"边本身）
             for edge in result.entity_entity_edges:
                 rel_type = getattr(edge, "relation_type", "")
                 if rel_type == ALIAS_PREDICATE:
@@ -539,39 +523,101 @@ class WritePipeline:
                     edge.target = alias_to_target[edge.target]
                     redirected_ee_count += 1
 
-            # 重定向 stmt_entity_edges（陈述句 → 实体边）
             for edge in result.stmt_entity_edges:
                 if edge.target in alias_ids:
                     edge.target = alias_to_target[edge.target]
                     redirected_se_count += 1
 
             logger.info(
-                f"[AliasMerge] 内存同步完成，处理 {len(alias_edges)} 条 '别名属于' 边，"
+                f"[AliasMerge] 内存归并完成，处理 {len(alias_edges)} 条 '别名属于' 边，"
                 f"重定向 entity_entity 边 {redirected_ee_count} 次，"
                 f"重定向 stmt_entity 边 {redirected_se_count} 次"
             )
 
-            # ── 2. 写入 Neo4j：别名属性归并 ──
-            records = await self._neo4j_connector.execute_query(
-                MERGE_ALIAS_BELONGS_TO,
-                end_user_id=self.end_user_id,
-            )
-            merged_count = len(records) if records else 0
-            logger.info(f"[AliasMerge] Neo4j 别名归并完成，影响 {merged_count} 条记录")
-
-            # ── 3. 写入 Neo4j：重定向指向别名节点的边到用户节点 ──
-            redirect_records = await self._neo4j_connector.execute_query(
-                REDIRECT_ALIAS_EDGES,
-                end_user_id=self.end_user_id,
-            )
-            redirect_count = len(redirect_records) if redirect_records else 0
-            logger.info(
-                f"[AliasMerge] Neo4j 边重定向完成，影响 {redirect_count} 条记录"
-            )
-
         except Exception as e:
             logger.warning(
-                f"[AliasMerge] 别名归并失败（不影响主流程）: {e}", exc_info=True
+                f"[AliasMerge] 内存归并失败（不影响主流程）: {e}", exc_info=True
+            )
+
+    # ──────────────────────────────────────────────
+    # Step 3.5: 异步后处理（Neo4j 别名归并 + 第二层去重）
+    # ──────────────────────────────────────────────
+
+    async def _post_store_async_tasks(self, result: ExtractionResult) -> None:
+        """提交写入后的异步 Celery 任务（全部 fire-and-forget，失败不影响主流程）：
+
+        1. Neo4j 别名归并 + 第二层去重
+        2. 异步情绪提取
+        3. 异步元数据提取
+        """
+        from app.core.memory.storage_services.extraction_engine.knowledge_extraction.metadata_extractor import (
+            collect_user_entities_for_metadata,
+        )
+
+        llm_model_id = (
+            str(self.memory_config.llm_model_id)
+            if self.memory_config.llm_model_id
+            else None
+        )
+        recorder = getattr(self, "_recorder", None)
+        snapshot_dir = (
+            recorder.snapshot_dir
+            if recorder is not None and recorder.enabled
+            else None
+        )
+
+        # ── 1. Neo4j 别名归并 + 第二层去重 ──
+        self._submit_celery_task(
+            "PostStore",
+            "app.tasks.post_store_dedup_and_alias_merge",
+            {
+                "end_user_id": self.end_user_id,
+                "entity_ids": [e.id for e in result.entity_nodes],
+                "llm_model_id": llm_model_id,
+            },
+        )
+
+        # ── 2. 异步情绪提取 ──
+        emotion_statements = getattr(self, "_emotion_statements", [])
+        if emotion_statements and llm_model_id:
+            self._submit_celery_task(
+                "Emotion",
+                "app.tasks.extract_emotion_batch",
+                {
+                    "statements": emotion_statements,
+                    "llm_model_id": llm_model_id,
+                    "language": self.language,
+                    "snapshot_dir": snapshot_dir,
+                },
+            )
+
+        # ── 3. 异步元数据提取 ──
+        user_entities = collect_user_entities_for_metadata(result.entity_nodes)
+        if user_entities and llm_model_id:
+            self._submit_celery_task(
+                "Metadata",
+                "app.tasks.extract_metadata_batch",
+                {
+                    "user_entities": user_entities,
+                    "llm_model_id": llm_model_id,
+                    "language": self.language,
+                    "snapshot_dir": snapshot_dir,
+                },
+            )
+
+    def _submit_celery_task(
+        self, label: str, task_name: str, kwargs: dict
+    ) -> None:
+        """提交 Celery 异步任务的通用方法。失败只记日志，不抛异常。"""
+        try:
+            from app.celery_app import celery_app
+
+            task_result = celery_app.send_task(task_name, kwargs=kwargs)
+            logger.info(f"[{label}] 异步任务已提交 - task_id={task_result.id}")
+        except Exception as e:
+            logger.error(
+                f"[{label}] 提交异步任务失败（不影响主流程）: {e}",
+                exc_info=True,
             )
 
     # ──────────────────────────────────────────────
@@ -622,127 +668,6 @@ class WritePipeline:
         except Exception as e:
             logger.error(
                 f"[Clustering] 提交聚类任务失败（不影响主流程）: {e}",
-                exc_info=True,
-            )
-
-    # ──────────────────────────────────────────────
-    # Step 4.5: 异步情绪提取
-    #    fire-and-forget 提交 Celery 任务，不阻塞主流程
-    # ──────────────────────────────────────────────
-
-    async def _extract_emotion(self, emotion_statements: list) -> None:
-        """提交异步情绪提取 Celery 任务。
-
-        从编排器收集的 user statement 列表中提取情绪，
-        异步回写到 Neo4j Statement 节点。失败不影响主流程。
-
-        在 PIPELINE_SNAPSHOT_ENABLED=true 时，会把当前运行的快照目录路径
-        通过 snapshot_dir 透传给 Celery 任务；worker 端在完成 LLM 抽取后，
-        将结果落盘到 <snapshot_dir>/4_emotion_outputs.json，避免主进程重复调用 LLM。
-        """
-        if not emotion_statements:
-            return
-
-        llm_model_id = (
-            str(self.memory_config.llm_model_id)
-            if self.memory_config.llm_model_id
-            else None
-        )
-        if not llm_model_id:
-            logger.warning("[Emotion] 无法提交情绪提取任务：llm_model_id 为空")
-            return
-
-        # 快照目录：仅在 PIPELINE_SNAPSHOT_ENABLED=true 时非空，供 worker 端落盘
-        recorder = getattr(self, "_recorder", None)
-        snapshot_dir = (
-            recorder.snapshot_dir
-            if recorder is not None and recorder.enabled
-            else None
-        )
-
-        try:
-            from app.celery_app import celery_app
-
-            result = celery_app.send_task(
-                "app.tasks.extract_emotion_batch",
-                kwargs={
-                    "statements": emotion_statements,
-                    "llm_model_id": llm_model_id,
-                    "language": self.language,
-                    "snapshot_dir": snapshot_dir,
-                },
-            )
-            logger.info(
-                f"[Emotion] 异步情绪提取任务已提交 - "
-                f"task_id = {result.id}, "
-                f"statement_count = {len(emotion_statements)}, "
-                f"snapshot_dir = {snapshot_dir}, "
-                f"source=async"
-            )
-        except Exception as e:
-            logger.error(
-                f"[Emotion] 提交情绪提取任务失败（不影响主流程）: {e}",
-                exc_info=True,
-            )
-
-    # ──────────────────────────────────────────────
-    # Step 3.6: 异步元数据提取
-    #    fire-and-forget 提交 Celery 任务，不阻塞主流程
-    # ──────────────────────────────────────────────
-
-    async def _extract_metadata(self, result: ExtractionResult) -> None:
-        """提交异步元数据提取 Celery 任务。
-
-        从去重后的用户实体 description 中提取结构化元数据，
-        异步回写到 Neo4j ExtractedEntity 节点。失败不影响主流程。
-        """
-        from app.core.memory.storage_services.extraction_engine.knowledge_extraction.metadata_extractor import (
-            collect_user_entities_for_metadata,
-        )
-
-        user_entities = collect_user_entities_for_metadata(result.entity_nodes)
-
-        if not user_entities:
-            return
-
-        llm_model_id = (
-            str(self.memory_config.llm_model_id)
-            if self.memory_config.llm_model_id
-            else None
-        )
-        if not llm_model_id:
-            logger.warning("[Metadata] 无法提交元数据提取任务：llm_model_id 为空")
-            return
-
-        # 快照目录
-        recorder = getattr(self, "_recorder", None)
-        snapshot_dir = (
-            recorder.snapshot_dir
-            if recorder is not None and recorder.enabled
-            else None
-        )
-
-        try:
-            from app.celery_app import celery_app
-
-            task_result = celery_app.send_task(
-                "app.tasks.extract_metadata_batch",
-                kwargs={
-                    "user_entities": user_entities,
-                    "llm_model_id": llm_model_id,
-                    "language": self.language,
-                    "snapshot_dir": snapshot_dir,
-                },
-            )
-            logger.info(
-                f"[Metadata] 异步元数据提取任务已提交 - "
-                f"task_id = {task_result.id}, "
-                f"entity_count = {len(user_entities)}, "
-                f"snapshot_dir = {snapshot_dir}"
-            )
-        except Exception as e:
-            logger.error(
-                f"[Metadata] 提交元数据提取任务失败（不影响主流程）: {e}",
                 exc_info=True,
             )
 

@@ -30,6 +30,7 @@ class ConversationMessage(BaseModel):
     """
     role: str = Field(..., description="The role of the speaker (e.g., 'user', 'assistant').")
     msg: str = Field(..., description="The text content of the message.")
+    dialog_at: Optional[str] = Field(None, description="Absolute timestamp of this message (ISO 8601).")
     files: list[tuple] = Field(default_factory=list, description="The file content of the message", exclude=True)
 
 
@@ -100,6 +101,7 @@ class Statement(BaseModel):
         False,
         description="Whether the statement reflects user's emotional state",
     )
+    dialog_at: Optional[str] = Field(None, description="Absolute timestamp of the source message (ISO 8601).")
 
 
 class ConversationContext(BaseModel):
@@ -139,6 +141,7 @@ class Chunk(BaseModel):
     statements: List[Statement] = Field(default_factory=list, description="A list of statements in the chunk.")
     files: list[tuple] = Field(default_factory=list, description="List of files in the chunk.")
     chunk_embedding: Optional[List[float]] = Field(default=None, description="The embedding vector of the chunk.")
+    dialog_at: Optional[str] = Field(None, description="Absolute timestamp of the source message (ISO 8601).")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata for the chunk.")
 
     @classmethod
@@ -155,6 +158,7 @@ class Chunk(BaseModel):
         return cls(
             content=f"{message.role}: {message.msg}",
             speaker=message.role,
+            dialog_at=message.dialog_at,
             metadata=metadata or {}
         )
     
@@ -169,7 +173,6 @@ class DialogData(BaseModel):
         ref_id: Reference ID linking to external dialog system
         end_user_id: End user ID for multi-tenancy
         created_at: Timestamp when the dialog was created
-        expired_at: Timestamp when the dialog expires (default: far future)
         metadata: Additional metadata as key-value pairs
         chunks: List of chunks from the conversation
         config_id: Configuration ID used to process this dialog
@@ -184,7 +187,6 @@ class DialogData(BaseModel):
     end_user_id: str = Field(default=..., description="End user ID of dialogue data")
     run_id: str = Field(default_factory=lambda: uuid4().hex, description="Unique identifier for this pipeline run.")
     created_at: datetime = Field(default_factory=datetime.now, description="The timestamp when the dialog was created.")
-    expired_at: datetime = Field(default_factory=lambda: datetime(9999, 12, 31), description="The timestamp when the dialog expires.")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata for the dialog.")
     chunks: List[Chunk] = Field(default_factory=list, description="A list of chunks from the conversation context.")
     config_id: Optional[int | str] = Field(None, description="Configuration ID used to process this dialog (integer or string)")
