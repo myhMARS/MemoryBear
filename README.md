@@ -1,4 +1,4 @@
-<img width="2346" height="1310" alt="MemoryBear Hero Banner" src="./assets/generated/hero-banner.png" />
+<img width="2346" height="1310" alt="MemoryBear Hero Banner" src="https://github.com/user-attachments/assets/2c0a3f72-1a14-4017-93c8-a7f490d545b6" />
 
 <div align="center">
 
@@ -53,13 +53,13 @@ Unlike traditional memory tools that treat knowledge as static data to be retrie
 - Domain jargon, colloquial expressions, and context-dependent references are not accurately encoded, leading to semantic drift in memory interpretation
 - Cross-language memory associations fail in multilingual or dialect-rich scenarios
 
-<img width="2294" height="1154" alt="Why MemoryBear" src="./assets/generated/pain-points.png" />
+<img width="2294" height="1154" alt="Why MemoryBear" src="https://github.com/user-attachments/assets/5e4192d8-ab76-402a-9e80-50d6ede147b9" />
 
 ---
 
 ## Core Features
 
-<img width="2294" height="1154" alt="MemoryBear Core Features" src="./assets/generated/core-features.png" />
+<img width="2294" height="1154" alt="MemoryBear Core Features" src="https://github.com/user-attachments/assets/5ae1e2bf-24be-4487-9065-7209f2a57f65" />
 
 ### Memory Extraction Engine
 
@@ -121,7 +121,7 @@ Unified service architecture exposing two API surfaces:
 
 ## Architecture
 
-<img src="./assets/generated/architecture.png" alt="MemoryBear System Architecture" width="100%"/>
+<img src="https://github.com/user-attachments/assets/650e3d02-a8a1-4550-9fce-dceb38e9542d" alt="MemoryBear System Architecture" width="100%"/>
 
 **Celery Three-Queue Async Architecture:**
 
@@ -139,15 +139,15 @@ Evaluation metrics include F1 score (F1), BLEU-1 (B1), and LLM-as-a-Judge score 
 
 MemoryBear consistently outperforms competing systems including Mem0, Zep, and LangMem across all four task categories:
 
-<img width="2256" height="890" alt="Benchmark Results" src="./assets/generated/benchmark-results.png" />
+<img width="2256" height="890" alt="Benchmark Results" src="https://github.com/user-attachments/assets/163ea5b5-b51d-4941-9f6c-7ee80977cdbc" />
 
 **Vector version (non-graph)**: Achieves substantially improved retrieval efficiency while maintaining high accuracy. Overall accuracy surpasses the best existing full-text retrieval methods (72.90 ± 0.19%), while maintaining low latency at both p50 and p95 for Search Latency and Total Latency.
 
-<img width="2248" height="498" alt="Vector Version Metrics" src="./assets/generated/benchmark-vector.png" />
+<img width="2248" height="498" alt="Vector Version Metrics" src="https://github.com/user-attachments/assets/5e5dae2c-1dde-4f69-88ca-95a9b665b5b2" />
 
 **Graph version**: Integrating the knowledge graph architecture pushes overall accuracy to a new benchmark (**75.00 ± 0.20%**), delivering performance metrics that significantly surpass all other methods.
 
-<img width="2238" height="342" alt="Graph Version Metrics" src="./assets/generated/benchmark-graph.png" />
+<img width="2238" height="342" alt="Graph Version Metrics" src="https://github.com/user-attachments/assets/b1eb1c05-da9b-4074-9249-7a9bbb40e9d2" />
 
 ---
 
@@ -229,7 +229,7 @@ npm install && npm run dev
 git clone https://github.com/SuanmoSuanyangTechnology/MemoryBear.git
 ```
 
-<img src="./assets/directory-structure.svg" alt="Directory Structure" width="100%"/>
+<img src="https://github.com/SuanmoSuanyangTechnology/MemoryBear/releases/download/assets-v1.0/assets__directory-structure.svg" alt="Directory Structure" width="100%"/>
 
 ### 3. Backend API Service
 
@@ -260,19 +260,19 @@ Download [Docker Desktop](https://www.docker.com/products/docker-desktop/) and p
 
 **PostgreSQL** — search → select → pull
 
-<img width="1280" height="731" alt="PostgreSQL Pull" src="./assets/screenshots/pg-pull.png" />
+<img width="1280" height="731" alt="PostgreSQL Pull" src="https://github.com/user-attachments/assets/96272efe-50ca-4a32-9686-5f23bc3f6c93" />
 
-<img width="1280" height="731" alt="PostgreSQL Container" src="./assets/screenshots/pg-container.png" />
+<img width="1280" height="731" alt="PostgreSQL Container" src="https://github.com/user-attachments/assets/074ea9da-9a3d-401b-b14b-89b81e05487e" />
 
-<img width="1280" height="731" alt="PostgreSQL Running" src="./assets/screenshots/pg-running.png" />
+<img width="1280" height="731" alt="PostgreSQL Running" src="https://github.com/user-attachments/assets/a14744cd-9350-4a2f-87dd-6105b072487d" />
 
 **Neo4j** — pull the same way. When creating the container, map two required ports and set an initial password:
 - `7474`: Neo4j Browser
 - `7687`: Bolt protocol
 
-<img width="1280" height="731" alt="Neo4j Container" src="./assets/screenshots/neo4j-container.png" />
+<img width="1280" height="731" alt="Neo4j Container" src="https://github.com/user-attachments/assets/881dca96-aec0-4d43-82d0-bb0402eadaf8" />
 
-<img width="1280" height="731" alt="Neo4j Running" src="./assets/screenshots/neo4j-running.png" />
+<img width="1280" height="731" alt="Neo4j Running" src="https://github.com/user-attachments/assets/87423c90-22e8-44a9-a00a-df5d4dce4909" />
 
 **Redis** — same steps as above.
 
@@ -343,9 +343,9 @@ Apply all migrations to create the full schema:
 alembic upgrade head
 ```
 
-<img width="1076" height="341" alt="Alembic Migration" src="./assets/screenshots/alembic-migration.png" />
+<img width="1076" height="341" alt="Alembic Migration" src="https://github.com/user-attachments/assets/6970a8e6-712b-4f49-937a-f5870a2d1a2a" />
 
-<img width="1280" height="680" alt="Database Tables" src="./assets/screenshots/db-tables.png" />
+<img width="1280" height="680" alt="Database Tables" src="https://github.com/user-attachments/assets/8bbec421-de0c-472b-a7ce-8b89cc1e2efd" />
 
 #### 3.5 Start the API Service
 
@@ -355,7 +355,7 @@ uv run -m app.main
 
 Access API documentation at http://localhost:8000/docs
 
-<img width="1280" height="675" alt="API Docs" src="./assets/screenshots/api-docs.png" />
+<img width="1280" height="675" alt="API Docs" src="https://github.com/user-attachments/assets/6d1c71b7-9ee8-4f80-9bed-19c410d6e85f" />
 
 #### 3.6 Start Celery Workers (Optional, for async tasks)
 
@@ -401,9 +401,9 @@ proxy: {
 npm run dev
 ```
 
-<img width="935" height="311" alt="Frontend Start" src="./assets/screenshots/frontend-start.png" />
+<img width="935" height="311" alt="Frontend Start" src="https://github.com/user-attachments/assets/8b08fc46-01d0-458b-ab4d-f5ac04bc2510" />
 
-<img width="1280" height="652" alt="Frontend UI" src="./assets/screenshots/frontend-ui.png" />
+<img width="1280" height="652" alt="Frontend UI" src="https://github.com/user-attachments/assets/542dbee3-8cd4-4b16-a8e5-36f8d6153820" />
 
 ### 5. Initialize the System
 
