@@ -142,7 +142,7 @@ class ElasticSearchVector(BaseVector):
 
         return True
 
-    def delete_by_ids(self, ids: list[str]):
+    def delete_by_ids(self, ids: list[str], *, refresh: bool = False):
         if not ids:
             return
         if not self._client.indices.exists(index=self._collection_name):
@@ -163,6 +163,8 @@ class ElasticSearchVector(BaseVector):
             actions = [{"_op_type": "delete", "_index": self._collection_name, "_id": es_id} for es_id in actual_ids]
             try:
                 helpers.bulk(self._client, actions)
+                if refresh:
+                    self._client.indices.refresh(index=self._collection_name)
             except BulkIndexError as e:
                 for error in e.errors:
                     delete_error = error.get('delete', {})
@@ -182,7 +184,7 @@ class ElasticSearchVector(BaseVector):
         else:
             return None
 
-    def delete_by_metadata_field(self, key: str, value: str):
+    def delete_by_metadata_field(self, key: str, value: str, *, refresh: bool = False):
         if not self._client.indices.exists(index=self._collection_name):
             return False
         actual_ids = self.get_ids_by_metadata_field(key, value)
@@ -191,6 +193,8 @@ class ElasticSearchVector(BaseVector):
             actions = [{"_op_type": "delete", "_index": self._collection_name, "_id": es_id} for es_id in actual_ids]
             try:
                 helpers.bulk(self._client, actions)
+                if refresh:
+                    self._client.indices.refresh(index=self._collection_name)
             except BulkIndexError as e:
                 for error in e.errors:
                     delete_error = error.get('delete', {})

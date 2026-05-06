@@ -546,6 +546,7 @@ async def delete_chunk(
         kb_id: uuid.UUID,
         document_id: uuid.UUID,
         doc_id: str,
+        force_refresh: bool = Query(False, description="Force Elasticsearch refresh after deletion"),
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ):
@@ -563,7 +564,7 @@ async def delete_chunk(
 
     vector_service = ElasticSearchVectorFactory().init_vector(knowledge=db_knowledge)
     if vector_service.text_exists(doc_id):
-        vector_service.delete_by_ids([doc_id])
+        vector_service.delete_by_ids([doc_id], refresh=force_refresh)
         # 更新 chunk_num
         db_document = db.query(Document).filter(Document.id == document_id).first()
         db_document.chunk_num -= 1

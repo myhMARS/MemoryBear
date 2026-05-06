@@ -176,6 +176,7 @@ async def delete_chunk(
     request: Request,
     api_key_auth: ApiKeyAuth = None,
     db: Session = Depends(get_db),
+    force_refresh: bool = Query(False, description="Force Elasticsearch refresh after deletion"),
 ):
     """
     delete document chunk
@@ -188,6 +189,7 @@ async def delete_chunk(
     return await chunk_controller.delete_chunk(kb_id=kb_id,
                                                document_id=document_id,
                                                doc_id=doc_id,
+                                               force_refresh=force_refresh,
                                                db=db,
                                                current_user=current_user)
 
