@@ -57,6 +57,8 @@ def collect_user_entities_for_metadata(
                 "entity_id": entity.id,
                 "entity_name": entity.name,
                 "descriptions": descriptions,
+                "aliases": list(entity.aliases or []),
+                "end_user_id": entity.end_user_id,
             })
 
     if user_entities:
