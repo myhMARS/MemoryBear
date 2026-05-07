@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import redis
 from redis.exceptions import RedisError
+from fastapi.encoders import jsonable_encoder
 
 # Import a unified Celery instance
 from app.celery_app import celery_app
@@ -1530,12 +1531,18 @@ def write_message_task(
                 )
         except Exception as _e:
             logger.warning(f"[CELERY WRITE] 写入 last_done 时间戳失败（不影响主流程）: {_e}")
+        # 将 result 转为 JSON 安全结构，避免 Celery JSON 序列化 pydantic BaseModel / UUID 失败
+        try:
+            safe_result = jsonable_encoder(result)
+        except Exception as _enc_e:
+            logger.warning(f"[CELERY WRITE] jsonable_encoder 失败，回退为字符串: {_enc_e}")
+            safe_result = str(result)
         return {
             "status": "SUCCESS",
-            "result": result,
+            "result": safe_result,
             "start_at": task_start_time,
             "end_user_id": end_user_id,
-            "config_id": config_id,
+            "config_id": str(config_id) if config_id is not None else None,
             "elapsed_time": elapsed_time,
             "task_id": self.request.id
         }

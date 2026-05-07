@@ -145,6 +145,7 @@ async def term_memory_save(end_user_id, strategy_type, scope):
 
 async def window_dialogue(end_user_id, langchain_messages, memory_config, scope):
     """
+    TODO 考虑作为滑动窗口写入的函数
     Process dialogue based on window size and write to Neo4j
 
     Manages conversation data based on a sliding window approach. When the window

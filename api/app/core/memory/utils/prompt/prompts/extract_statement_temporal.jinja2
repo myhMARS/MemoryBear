@@ -41,7 +41,6 @@ Each output item should be a structured candidate memory statement.
 - end_user_id: 终端用户 ID
 - dialog_at: 会话时间，必须是 ISO 8601 时间点
 - target_content: 当前要处理的对话片段文本，也是唯一允许被抽取的目标文本
-- dialog_at: 会话时间，优先作为解析相对时间表达的参考时间
 - target_message_date: 目标文本对应的时间，可作为辅助时间背景；当与 dialog_at 同时存在时，优先使用 dialog_at 解析相对时间表达
 - supporting_context: 完整对话上下文，仅用于辅助理解 target_content，不能单独贡献新的可抽取事实
 - supporting_context.msgs: 按顺序提供的上下文消息，可包含 User 和 Assistant
@@ -50,7 +49,6 @@ Each output item should be a structured candidate memory statement.
 - end_user_id: end-user identifier
 - dialog_at: session time, which must be an ISO 8601 timestamp
 - target_content: the current dialogue fragment to process, and the only text span that may be extracted from
-- dialog_at: session time, used as the primary reference for resolving relative temporal expressions
 - target_message_date: the time associated with the target content and may serve as supporting temporal context; when both exist, prefer `dialog_at` for resolving relative expressions
 - supporting_context: full dialogue context used only to help interpret target_content and must not independently contribute new extractable facts
 - supporting_context.msgs: ordered contextual messages, which may include User and Assistant messages
@@ -119,16 +117,29 @@ statement_type：
 
 时间规则：
 
-- 仅使用目标文本中明确陈述或可由 `target_message_date` 直接解析的时间信息；不要使用外部知识补时间。
+- 仅使用目标文本中明确陈述或可由 `dialog_at` / `target_message_date` 直接解析的时间信息；不要使用外部知识补时间。
 - 优先使用 `dialog_at` 作为“现在”来解释相对时间，例如“昨天”“上周五”“下个月”；只有在 `dialog_at` 缺失时才退回 `target_message_date`。
 - 如果相对时间可以稳定落到更具体的中文时间表达，就应直接改写进 `statement_text`，而不要保留原始模糊表达。
 - 可稳定具体化的示例包括：
   - “昨天” -> “2026年4月29日”
   - “前天晚上” -> “2026年4月28日晚上”
   - “上周三” -> “2026年4月22日”
+  - “上周” -> “2026年4月20日至2026年4月26日”
+  - “上周末” -> “2026年4月25日至2026年4月26日”
   - “上个月” -> “2026年3月”
   - “下周” -> “2026年5月4日至2026年5月10日”
-- 如果相对时间只能粗粒度定位，保留该粗粒度但仍尽量具体化；例如“去年冬天”可以保留为“去年冬天”，不要强行伪精确到具体日期。
+- 对开放区间时间表达，也要做相对时间消解并改写进 `statement_text`。
+- 常见开放过去区间表达包括：`最近`、`近来`、`这段时间`、`这些天`、`截至现在`、`更早之前`。
+- 常见开放未来区间表达包括：`即将`、`接下来`、`不久后`、`很快`、`未来一段时间`。
+- 这类表达无法稳定落到封闭日期区间时，可以改写为开放区间表达，例如：
+  - “最近” -> “截至2026年4月1日之前的最近一段时间”
+  - “近来” -> “截至2026年4月1日之前的近来一段时间”
+  - “这段时间” -> “截至2026年4月1日之前的这段时间”
+  - “即将” -> “在2026年4月1日之后即将发生”
+  - “接下来” -> “在2026年4月1日之后接下来的一段时间”
+  - “很快” -> “在2026年4月1日之后不久”
+- 如果相对时间不能稳定落到具体日期或日期区间，就保留其最小可信粗粒度，但仍尽量做相对时间消解；例如“去年冬天”可改写为“2025年冬天”，而不是保留“去年冬天”。
+- 对节假日类表达，能稳定映射到具体日期或日期区间时应具体化；例如“五一”通常可改写为具体日期，“清明节”通常也可改写为具体日期或短区间；“春节前后”这类边界不稳的表达仍保留较粗粒度。
 - `valid_at` 表示陈述开始成立或生效的时间。
 - `invalid_at` 表示陈述结束或不再成立的时间；如果仍在持续，填 `"NULL"`。
 - `dialog_at` 表示当前会话时间，每条 statement 都必须原样复制输入中的 `dialog_at`。
@@ -168,6 +179,14 @@ User-subject normalization:
 
 - If the subject of a statement is the user, always use “the user” as the subject in the extracted statement, regardless of whether the context provides the user’s real name, nickname, alias, or other identifier.
 - This is a hard rule. If a user-subject statement does not use “the user,” treat it as invalid.
+- Keep “the user” as the main retrieval anchor in English rewrites, including object position when possible.
+- For English reflexive self-expressions, preserve retrieval consistency without creating unnatural strings. Use these preferred rewrites:
+  - “myself” in ordinary object position -> “the user”
+  - “be myself” -> “be who the user is”
+  - “embrace myself” -> “embrace who the user is”
+  - “accept myself” -> “accept who the user is”
+  - “express myself” -> “express the user’s thoughts” only if needed for grammaticality; otherwise keep the smallest rewrite anchored on “the user”
+- Do not rewrite fixed self-expressions into forms such as “embrace the user” or “be the user” when a more natural anchored template is available.
 
 Coreference resolution:
 
@@ -202,14 +221,27 @@ Temporal rules:
 
 - Use only temporal information explicitly stated in the target text or directly resolvable from `dialog_at` / `target_message_date`; do not add dates from external knowledge.
 - Prefer `dialog_at` as “now” when interpreting relative expressions such as “yesterday,” “last Friday,” or “next month”; only fall back to `target_message_date` when `dialog_at` is unavailable.
-- If a relative time can be stably grounded to a more concrete Chinese time phrase, rewrite it directly into `statement_text` rather than keeping the vague source phrase.
+- If a relative time can be stably grounded to a more concrete time expression in the output language, rewrite it directly into `statement_text` rather than keeping the vague source phrase.
 - Examples of stable concretization:
-  - “yesterday” -> “2026年4月29日”
-  - “the night before last” -> “2026年4月28日晚上”
-  - “last Wednesday” -> “2026年4月22日”
-  - “last month” -> “2026年3月”
-  - “next week” -> “2026年5月4日至2026年5月10日”
-- If the relative time can only be grounded coarsely, keep that coarse granularity while still making it as concrete as reasonably possible; for example, “last winter” may stay as “去年冬天” instead of being forced into fake exact dates.
+  - “yesterday” -> “April 29, 2026”
+  - “the night before last” -> “the evening of April 28, 2026”
+  - “last Wednesday” -> “April 22, 2026”
+  - “last week” -> “April 20 to April 26, 2026”
+  - “last weekend” -> “April 25 to April 26, 2026”
+  - “last month” -> “March 2026”
+  - “next week” -> “May 4 to May 10, 2026”
+- Open-interval temporal expressions should also be resolved and rewritten inside `statement_text`.
+- Common open past-interval expressions include: `recently`, `lately`, `these days`, `over this period`, `as of now`, and `earlier`.
+- Common open future-interval expressions include: `upcoming`, `coming up`, `soon`, `before long`, and `in the near future`.
+- When they cannot be stably converted into a closed date range, rewrite them as open intervals, for example:
+  - `recently` -> `recently before April 1, 2026`
+  - `lately` -> `lately before April 1, 2026`
+  - `these days` -> `during the period leading up to April 1, 2026`
+  - `upcoming` -> `upcoming after April 1, 2026`
+  - `coming up` -> `coming up after April 1, 2026`
+  - `soon` -> `soon after April 1, 2026`
+- If the relative time cannot be stably grounded to an exact date or date range, keep the smallest trustworthy coarse granularity but still resolve the relative reference as much as possible; for example, “last winter” may become “winter 2025” rather than remaining “last winter”.
+- For holiday expressions, concretize them when they can be stably mapped to specific dates or short date ranges; for example, Labor Day or Qingming Festival usually can be grounded, while expressions such as “around Spring Festival” should stay at a coarser granularity.
 - `valid_at` means when the statement became valid or started to hold.
 - `invalid_at` means when the statement ended or stopped being valid; use `"NULL"` if it is still ongoing.
 - `dialog_at` is the session timestamp, and every statement must copy the input `dialog_at` verbatim.
@@ -237,9 +269,10 @@ temporal_type:
 Rewrite boundary:
 
 - Minimal rewriting is allowed only to resolve reference, ellipsis, and temporal ambiguity.
-- For resolvable relative time expressions, rewrite them into grounded Chinese time phrases directly inside `statement_text`.
+- For resolvable relative time expressions, rewrite them into grounded time expressions directly inside `statement_text`, using the output language.
 - Do not keep both the vague source phrase and the grounded phrase together; output only the rewritten concrete form.
 - Do not fake precision for time expressions that cannot be grounded reliably from `dialog_at`.
+- In English, you may use a slightly more natural anchored paraphrase for reflexive user-self expressions when a literal replacement would be awkward, as long as the rewritten form still keeps “the user” as the retrieval anchor and does not change the meaning.
 - Do not introduce unsupported facts, extra inference, or stylistic summarization.
   {% endif %}
 
@@ -329,7 +362,7 @@ Rewrite boundary:
   "statements": [
     {
       "statement_id": "stmt_m3n4o5p6",
-      "statement_text": "用户最近在学Python。",
+      "statement_text": "用户截至2026年4月1日之前的最近一段时间在学Python。",
       "statement_type": "FACT",
       "temporal_type": "DYNAMIC",
       "has_emotional_state": false,
@@ -340,7 +373,7 @@ Rewrite boundary:
     },
     {
       "statement_id": "stmt_q7r8s9t0",
-      "statement_text": "用户最近每晚都会练一个小时Python。",
+      "statement_text": "用户截至2026年4月1日之前的最近一段时间每晚都会练一个小时Python。",
       "statement_type": "FACT",
       "temporal_type": "DYNAMIC",
       "has_emotional_state": false,
@@ -368,17 +401,17 @@ Rewrite boundary:
   "chunk_id": "chunk_c3d4e5f6",
   "end_user_id": "eu_12345678",
   "dialog_at": "2026-04-01T00:00:00Z",
-  "target_content": "这周老师新布置的那两个我觉得有点难，而且我昨晚看了半天还是没太搞明白。要是周末再弄不出来，我可能就得去问助教了。",
+  "target_content": "去年冬天老师布置的那两个项目我一直觉得有点难，而且我昨晚看了半天还是没太搞明白。要是这周末再弄不出来，我可能就得去问助教了。",
   "target_message_date": "2026-04-01T00:00:00",
   "supporting_context": {
     "msgs": [
       {
         "role": "User",
-        "msg": "这周老师新布置的那两个我觉得有点难，而且我昨晚看了半天还是没太搞明白。要是周末再弄不出来，我可能就得去问助教了。"
+        "msg": "去年冬天老师布置的那两个项目我一直觉得有点难，而且我昨晚看了半天还是没太搞明白。要是这周末再弄不出来，我可能就得去问助教了。"
       },
       {
         "role": "Assistant",
-        "msg": "听起来你卡在老师这周新布置的两个内容上了，如果周末还没进展，再去问助教也可以。"
+        "msg": "听起来你卡在老师去年冬天布置的那两个项目上了，如果这周末还没进展，再去问助教也可以。"
       }
     ]
   }
@@ -388,7 +421,7 @@ Rewrite boundary:
   "statements": [
     {
       "statement_id": "stmt_y5z6a7b8",
-      "statement_text": "用户觉得2026年3月30日至2026年4月5日老师新布置的那两个内容有点难。",
+      "statement_text": "用户觉得2025年冬天老师布置的那两个项目有点难。",
       "statement_type": "OPINION",
       "temporal_type": "DYNAMIC",
       "has_emotional_state": true,
@@ -399,7 +432,7 @@ Rewrite boundary:
     },
     {
       "statement_id": "stmt_c9d0e1f2",
-      "statement_text": "用户2026年3月31日晚上看了半天那两个内容还是没太搞明白。",
+      "statement_text": "用户2026年3月31日晚上看了半天那两个项目还是没太搞明白。",
       "statement_type": "FACT",
       "temporal_type": "DYNAMIC",
       "has_emotional_state": false,
@@ -506,7 +539,7 @@ Example Output: {
   "statements": [
     {
       "statement_id": "stmt_m3n4o5p6",
-      "statement_text": "The user has been learning Python recently.",
+      "statement_text": "The user has been learning Python recently before April 1, 2026.",
       "statement_type": "FACT",
       "temporal_type": "DYNAMIC",
       "has_emotional_state": false,
@@ -517,7 +550,7 @@ Example Output: {
     },
     {
       "statement_id": "stmt_q7r8s9t0",
-      "statement_text": "The user has recently been practicing Python for an hour every night.",
+      "statement_text": "The user has been practicing Python for an hour every night recently before April 1, 2026.",
       "statement_type": "FACT",
       "temporal_type": "DYNAMIC",
       "has_emotional_state": false,
@@ -545,17 +578,17 @@ Example Input: {
   "chunk_id": "chunk_c3d4e5f6",
   "end_user_id": "eu_12345678",
   "dialog_at": "2026-04-01T00:00:00Z",
-  "target_content": "The two things the teacher assigned this week seem hard to me, and even after looking at them for a long time last night I still didn't really understand them. If I still can't finish them by the weekend, I may have to ask the TA.",
+  "target_content": "The two projects the teacher assigned last winter seem difficult to me, and even after looking at them for a long time last night I still didn't really understand them. If I still can't finish them by this weekend, I may have to ask the TA.",
   "target_message_date": "2026-04-01T00:00:00",
   "supporting_context": {
     "msgs": [
       {
         "role": "User",
-        "msg": "The two things the teacher assigned this week seem hard to me, and even after looking at them for a long time last night I still didn't really understand them. If I still can't finish them by the weekend, I may have to ask the TA."
+        "msg": "The two projects the teacher assigned last winter seem difficult to me, and even after looking at them for a long time last night I still didn't really understand them. If I still can't finish them by this weekend, I may have to ask the TA."
       },
       {
         "role": "Assistant",
-        "msg": "It sounds like you're stuck on the two things assigned this week, and asking the TA would make sense if there is still no progress by the weekend."
+        "msg": "It sounds like you're stuck on the two projects assigned last winter, and asking the TA would make sense if there is still no progress by this weekend."
       }
     ]
   }
@@ -565,7 +598,7 @@ Example Output: {
   "statements": [
     {
       "statement_id": "stmt_y5z6a7b8",
-      "statement_text": "The user thinks the two items assigned during 2026-03-30 to 2026-04-05 are difficult.",
+      "statement_text": "The user thinks the two projects assigned in winter 2025 are difficult.",
       "statement_type": "OPINION",
       "temporal_type": "DYNAMIC",
       "has_emotional_state": true,
@@ -576,7 +609,7 @@ Example Output: {
     },
     {
       "statement_id": "stmt_c9d0e1f2",
-      "statement_text": "The user spent a long time on the evening of 2026-03-31 looking at those two items but still did not really understand them.",
+      "statement_text": "The user spent a long time on the evening of 2026-03-31 looking at those two projects but still did not really understand them.",
       "statement_type": "FACT",
       "temporal_type": "DYNAMIC",
       "has_emotional_state": false,
@@ -609,6 +642,7 @@ Example Output: {
 - 非用户主体是否尽量写成具体名称；若无法做到，是否已正确标记 `has_unsolved_reference = true`
 - 如果最终 `statement_text` 已经落到具体实体名，`has_unsolved_reference` 是否已经改为 `false`
 - 如果 `statement_text` 中出现可由 `dialog_at` 稳定解析的相对时间，是否已经改写成更具体的日期、月份或日期区间表达
+- 如果 `statement_text` 中出现“最近”“近来”“即将”“接下来”“很快”这类开放区间时间词，是否已经改写为带 `dialog_at` 锚点的开放区间表达
 - statement_type 是否合法，且没有把一般事实机械标成 `OPINION`
 - `has_emotional_state` 是否仅用于判断是否存在情感状态，而没有被当作情绪分类字段
 - temporal_type 是否与 valid_at / invalid_at 一致
@@ -620,6 +654,7 @@ Example Output: {
 - Render non-user subjects as concrete names when possible; otherwise mark `has_unsolved_reference = true`
 - If the final `statement_text` already resolves the reference to a concrete named entity, ensure `has_unsolved_reference = false`
 - If `statement_text` contains relative time expressions that can be stably resolved from `dialog_at`, rewrite them into more concrete date, month, or date-range expressions
+- If `statement_text` contains open-interval temporal words such as `recently`, `lately`, `upcoming`, `coming up`, or `soon`, rewrite them into open interval expressions anchored on `dialog_at`
 - Ensure statement_type is valid and do not mechanically label ordinary facts as `OPINION`
 - Ensure `has_emotional_state` is used only for emotional-state presence detection, not emotion classification
 - Ensure temporal_type is consistent with valid_at and invalid_at
