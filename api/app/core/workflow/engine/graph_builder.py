@@ -2,6 +2,7 @@
 # Author: Eternity
 # @Email: 1533512157@qq.com
 # @Time : 2026/2/10 13:33
+import json
 import logging
 import re
 import uuid
@@ -318,7 +319,9 @@ class GraphBuilder:
                     # For LLM nodes, use branch_signal field for routing (output is dynamic text)
                     # For other branch nodes (e.g. HTTP), use output field
                     route_field = "branch_signal" if node_type == NodeType.LLM else "output"
-                    related_edge[idx]['condition'] = f"node['{node_id}']['{route_field}'] == '{related_edge[idx]['label']}'"
+                    related_edge[idx]['condition'] = (
+                        f"node[{json.dumps(node_id)}][{json.dumps(route_field)}] == {json.dumps(related_edge[idx]['label'])}"
+                    )
 
             if node_instance:
                 # Wrap node's run method to avoid closure issues
