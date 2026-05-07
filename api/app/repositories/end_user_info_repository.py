@@ -138,3 +138,41 @@ class EndUserInfoRepository:
                 f"aliases_count={len(end_user_info.aliases or [])}"
             )
         return end_user_info
+
+    def remove_aliases(
+        self,
+        end_user_id: uuid.UUID,
+        aliases_to_remove: List[str],
+    ) -> Optional["EndUserInfo"]:
+        """从用户别名列表中移除指定别名（忽略大小写）。
+
+        Args:
+            end_user_id: 终端用户 ID
+            aliases_to_remove: 需要移除的别名列表
+
+        Returns:
+            更新后的 EndUserInfo，若记录不存在则返回 None
+        """
+        if not aliases_to_remove:
+            return self.get_by_end_user_id(end_user_id)
+
+        end_user_info = self.get_by_end_user_id(end_user_id)
+        if not end_user_info:
+            logger.warning(f"[EndUserInfo] 记录不存在，跳过别名移除: end_user_id={end_user_id}")
+            return None
+
+        remove_lower = {a.strip().lower() for a in aliases_to_remove if a.strip()}
+        existing = list(end_user_info.aliases or [])
+        new_aliases = [a for a in existing if a.lower() not in remove_lower]
+
+        if len(new_aliases) == len(existing):
+            return end_user_info
+
+        end_user_info.aliases = new_aliases
+        self.db.commit()
+        self.db.refresh(end_user_info)
+        logger.info(
+            f"[EndUserInfo] 别名移除完成: end_user_id={end_user_id}, "
+            f"removed={aliases_to_remove}, remaining={new_aliases}"
+        )
+        return end_user_info

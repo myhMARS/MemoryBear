@@ -125,6 +125,44 @@ class WriteSnapshotRecorder:
             },
         )
 
+    # ── Stage 8: 别名归并后（异步，由 Celery PostStore 任务写入） ──
+
+    @staticmethod
+    def save_alias_merge_result(snapshot_dir: str, entity_rows: List[Dict]) -> None:
+        """将别名归并+节点删除后的 Neo4j 实体状态写入 8_after_alias_merge.json。
+
+        由 Celery post_store_dedup_and_alias_merge 任务在完成归并和删除后调用，
+        直接写入已有的 snapshot 目录，无需重建 WriteSnapshotRecorder 实例。
+
+        Args:
+            snapshot_dir: 主流水线创建的 snapshot 目录绝对路径。
+            entity_rows:  从 Neo4j 查询到的实体属性列表，每项包含
+                          id / name / entity_type / description / aliases 字段。
+        """
+        import json
+        from pathlib import Path
+
+        try:
+            path = Path(snapshot_dir) / "8_after_alias_merge.json"
+            data = {
+                "entity_nodes": [
+                    {
+                        "id": row.get("id"),
+                        "name": row.get("name"),
+                        "entity_type": row.get("entity_type"),
+                        "description": row.get("description"),
+                        "aliases": row.get("aliases", []),
+                    }
+                    for row in entity_rows
+                ],
+                "entity_count": len(entity_rows),
+            }
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+            logger.debug(f"[Snapshot] 8_after_alias_merge → {path}")
+        except Exception as e:
+            logger.warning(f"[Snapshot] 保存 8_after_alias_merge 失败: {e}")
+
     # ── Stage 0: 汇总 ──
 
     def record_summary(self, stats: Dict[str, int]) -> None:

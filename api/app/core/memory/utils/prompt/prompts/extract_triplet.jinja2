@@ -234,11 +234,12 @@ Each relation class now keeps only one canonical `covered_predicates` value. Onc
 {% endif %}
 
 - `命名关系`
-  - definition: 表达实体名称、别名、称呼之间的对应关系。
-  - covered_predicates: `别名属于`
-  - positive_examples: `山哥 -> 别名属于 -> 用户`、`多多 -> 别名属于 -> 用户的小狗`
+  - definition: 表达实体名称、别名、称呼之间的对应关系，包括新增别名和别名失效两种子语义。
+  - covered_predicates: `别名属于`、`别名失效`
+  - positive_examples (`别名属于`): `山哥 -> 别名属于 -> 用户`、`多多 -> 别名属于 -> 用户的小狗`
+  - positive_examples (`别名失效`): `老陈 -> 别名失效 -> 用户`（当对话明确表达"不再叫X了"时使用）
   - negative_examples: `导师 -> 别名属于 -> 用户`、`好人 -> 别名属于 -> 用户`
-  - notes: 只处理名字性表达，不处理角色、职业、评价词。
+  - notes: 只处理名字性表达，不处理角色、职业、评价词。`别名失效` 仅在对话**明确**表达某个别名已不再适用时使用，不要因为出现新别名就自动推断旧别名失效。
   - status: `enabled`
 
 - `归属身份关系`
@@ -341,6 +342,7 @@ Each relation class now keeps only one canonical `covered_predicates` value. Onc
 只能使用以下中文关系类型。如果没有完全匹配的关系，请选择最接近的一项，不要发明新关系。
 
 - `别名属于`: 别名指向其对应的规范实体
+- `别名失效`: 某个别名已不再适用于该实体（仅在对话明确表达"不再叫X"时使用）
 - `属于类型`: 实体属于某种类别、身份、职业、角色或归属对象
 - `位于`: 实体位于某地点、场所或空间位置
 - `前往`: 主体前往某个地点、场所、组织或活动对象
@@ -477,7 +479,7 @@ Each relation class now keeps only one canonical `covered_predicates` value. Onc
 - Do not use ordinary time expressions as triplet objects.
   {% endif %}
 
-**Alias Relation (`别名属于`):**
+**Alias Relation (`别名属于` / `别名失效`):**
 {% if language == "zh" %}
 
 - 当多个名字明确指向同一实体时，使用 `别名属于`。
@@ -488,6 +490,8 @@ Each relation class now keeps only one canonical `covered_predicates` value. Onc
 - 如果所有格同时明确表达持有关系，也应抽取 `X -> 拥有 -> X 的 Y`。
 - 在用户自指场景中，规范实体应为已经规范化后的 `用户`。
 - 不要把角色、职业、身份、类别、夸赞、评价或其他非名字性描述抽成 `别名属于`。
+- 当对话**明确**表达某个别名已不再适用时（如"不叫X了""X这个称呼已经不用了"），使用 `别名失效`，方向为 `旧别名 -> 别名失效 -> canonical entity`。
+- 不要因为出现新别名就自动推断旧别名失效；只有对话中有明确的否定/废弃表达时才使用 `别名失效`。
   {% else %}
 - Use `别名属于` when multiple names clearly refer to the same entity.
 - Direction is always `alias -> 别名属于 -> canonical entity`.
@@ -497,6 +501,8 @@ Each relation class now keeps only one canonical `covered_predicates` value. Onc
 - If the possessive phrase also explicitly expresses possession, also extract `X -> 拥有 -> X's Y`.
 - In user self-reference cases, the canonical entity should be the normalized user entity `用户`.
 - Do not use `别名属于` for roles, occupations, identities, categories, compliments, evaluations, or other non-name descriptions.
+- Use `别名失效` when the conversation **explicitly** states that an alias is no longer applicable (e.g., "no longer called X", "X is not used anymore"). Direction is `old_alias -> 别名失效 -> canonical entity`.
+- Do not infer alias invalidation just because a new alias appears; only use `别名失效` when there is an explicit negation or abandonment expression in the conversation.
   {% endif %}
 
 **subject_name / object_name Consistency:**

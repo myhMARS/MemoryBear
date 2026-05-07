@@ -1773,6 +1773,7 @@ def post_store_dedup_and_alias_merge_task(
     end_user_id: str,
     entity_ids: List[str],
     llm_model_id: Optional[str] = None,
+    snapshot_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Celery task: 写入后异步执行 Neo4j 别名归并 + 第二层去重。
 
@@ -1799,13 +1800,15 @@ def post_store_dedup_and_alias_merge_task(
         from app.repositories.neo4j.cypher_queries import (
             MERGE_ALIAS_BELONGS_TO,
             REDIRECT_ALIAS_EDGES,
+            DELETE_ALIAS_NODES,
+            REMOVE_INVALID_ALIASES,
         )
 
         connector = Neo4jConnector()
         result_info: Dict[str, Any] = {}
 
         try:
-            # ── 1. Neo4j 别名归并 ──
+            # ── 1. Neo4j 别名归并（追加新别名） ──
             try:
                 records = await connector.execute_query(
                     MERGE_ALIAS_BELONGS_TO,
@@ -1817,6 +1820,28 @@ def post_store_dedup_and_alias_merge_task(
             except Exception as e:
                 logger.warning(f"[PostStore] Neo4j 别名归并失败: {e}")
                 result_info["alias_merge_error"] = str(e)
+
+            # ── 1.5 Neo4j 失效别名移除（从 aliases 中删除旧别名） ──
+            try:
+                invalid_records = await connector.execute_query(
+                    REMOVE_INVALID_ALIASES,
+                    end_user_id=end_user_id,
+                )
+                invalid_count = len(invalid_records) if invalid_records else 0
+                result_info["invalid_aliases_removed"] = invalid_count
+                logger.info(f"[PostStore] 失效别名移除完成，影响 {invalid_count} 条记录")
+
+                # 同步删除 PostgreSQL end_user_info.aliases 中的失效别名
+                if invalid_records:
+                    removed_names = [
+                        r.get("removed_alias") for r in invalid_records
+                        if r.get("removed_alias")
+                    ]
+                    if removed_names:
+                        _remove_invalid_aliases_pg(end_user_id, removed_names)
+            except Exception as e:
+                logger.warning(f"[PostStore] 失效别名移除失败: {e}")
+                result_info["invalid_alias_error"] = str(e)
 
             # ── 2. Neo4j 边重定向 ──
             try:
@@ -1831,7 +1856,41 @@ def post_store_dedup_and_alias_merge_task(
                 logger.warning(f"[PostStore] Neo4j 边重定向失败: {e}")
                 result_info["redirect_error"] = str(e)
 
-            # ── 3. 第二层去重（与 Neo4j 已有实体联合去重） ──
+            # ── 3. 删除别名节点及"别名属于"关系 ──
+            try:
+                delete_records = await connector.execute_query(
+                    DELETE_ALIAS_NODES,
+                    end_user_id=end_user_id,
+                )
+                deleted_count = delete_records[0].get("deleted_count", 0) if delete_records else 0
+                result_info["alias_nodes_deleted"] = deleted_count
+                logger.info(f"[PostStore] 别名节点删除完成，删除 {deleted_count} 个节点")
+            except Exception as e:
+                logger.warning(f"[PostStore] 别名节点删除失败: {e}")
+                result_info["alias_delete_error"] = str(e)
+
+            # ── 3.5 Snapshot: 别名归并+删除后的实体状态 ──
+            if snapshot_dir:
+                try:
+                    snapshot_query = """
+                    UNWIND $entity_ids AS eid
+                    MATCH (e:ExtractedEntity {id: eid})
+                    RETURN e.id AS id, e.name AS name,
+                           e.entity_type AS entity_type,
+                           e.description AS description,
+                           coalesce(e.aliases, []) AS aliases
+                    """
+                    snap_records = await connector.execute_query(
+                        snapshot_query, entity_ids=entity_ids
+                    )
+                    entity_rows = [dict(r) for r in snap_records] if snap_records else []
+                    from app.core.memory.utils.debug.write_snapshot_recorder import WriteSnapshotRecorder
+                    WriteSnapshotRecorder.save_alias_merge_result(snapshot_dir, entity_rows)
+                    logger.info(f"[PostStore] Snapshot 8_after_alias_merge 已写入，实体数={len(entity_rows)}")
+                except Exception as e:
+                    logger.warning(f"[PostStore] Snapshot 写入失败（不影响主流程）: {e}")
+
+            # ── 4. 第二层去重（与 Neo4j 已有实体联合去重） ──
             try:
                 from app.core.memory.storage_services.extraction_engine.deduplication.second_layer_dedup import (
                     second_layer_dedup_and_merge_with_neo4j,
@@ -1997,6 +2056,38 @@ def _sync_end_user_info_pg(
     except Exception as e:
         logger.warning(
             f"[Metadata][PG] 同步 end_user_info 失败（不影响主流程）: "
+            f"end_user_id={end_user_id}, error={e}",
+            exc_info=True,
+        )
+
+
+def _remove_invalid_aliases_pg(
+    end_user_id: str,
+    aliases_to_remove: List[str],
+) -> None:
+    """将失效别名从 PostgreSQL end_user_info.aliases 中移除。
+
+    失败只记日志，不抛异常，不影响主流程。
+    """
+    try:
+        import uuid as _uuid
+        from app.db import get_db_context
+        from app.repositories.end_user_info_repository import EndUserInfoRepository
+
+        eu_uuid = _uuid.UUID(end_user_id)
+        with get_db_context() as db:
+            info_repo = EndUserInfoRepository(db)
+            info_repo.remove_aliases(
+                end_user_id=eu_uuid,
+                aliases_to_remove=aliases_to_remove,
+            )
+        logger.info(
+            f"[PostStore][PG] 失效别名已从 end_user_info 移除: "
+            f"end_user_id={end_user_id}, removed={aliases_to_remove}"
+        )
+    except Exception as e:
+        logger.warning(
+            f"[PostStore][PG] 移除失效别名失败（不影响主流程）: "
             f"end_user_id={end_user_id}, error={e}",
             exc_info=True,
         )
