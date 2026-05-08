@@ -9,6 +9,7 @@ from app.core.memory.llm_tools.openai_embedder import OpenAIEmbedderClient
 from app.core.memory.models.base_response import RobustLLMResponse
 from app.core.memory.models.graph_models import MemorySummaryNode
 from app.core.memory.models.message_models import DialogData
+from app.core.memory.storage_services.extraction_engine.steps.base import call_structured
 from app.core.memory.utils.prompt.prompt_utils import render_memory_summary_prompt
 from app.core.language_utils import validate_language  # 使用集中化的语言校验
 from pydantic import Field
@@ -183,9 +184,10 @@ async def _process_chunk_summary(
         ]
 
         # Generate structured summary with the existing LLM client
-        structured = await llm_client.response_structured(
-            messages=messages,
-            response_model=MemorySummaryResponse,
+        structured = await call_structured(
+            llm_client,
+            messages,
+            MemorySummaryResponse,
         )
         summary_text = structured.summary.strip()
         # Generate title and type for the summary

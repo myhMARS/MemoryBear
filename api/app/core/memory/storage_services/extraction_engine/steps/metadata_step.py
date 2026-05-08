@@ -63,7 +63,7 @@ class MetadataExtractionStep(ExtractionStep[MetadataStepInput, MetadataStepOutpu
         from app.core.memory.models.metadata_models import MetadataExtractionResponse
 
         messages = [{"role": "user", "content": prompt}]
-        return await self.llm_client.response_structured(
+        return await self.call_structured(
             messages, MetadataExtractionResponse
         )
 

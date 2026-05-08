@@ -19,6 +19,40 @@ InputT = TypeVar("InputT")
 OutputT = TypeVar("OutputT")
 
 
+async def call_structured(llm_client, messages: list[dict], response_model: type):
+    """兼容所有 provider 的结构化输出工具函数。
+
+    优先调用 llm_client.response_structured()；若 provider 不支持
+    with_structured_output（如 DashScope ChatTongyi），捕获
+    NotImplementedError 后降级到 chat + StructResponse（json_repair 兜底）。
+
+    Args:
+        llm_client: LLM 客户端实例
+        messages: 消息列表，格式 [{"role": ..., "content": ...}]
+        response_model: 目标 Pydantic 模型类
+
+    Returns:
+        解析后的 Pydantic 模型实例
+    """
+    from app.core.memory.utils.llm.llm_utils import StructResponse
+
+    try:
+        return await llm_client.response_structured(
+            messages=messages,
+            response_model=response_model,
+        )
+    except NotImplementedError:
+        logger.warning("call_structured: 降级到 chat + StructResponse")
+    except Exception as e:
+        if isinstance(e.__cause__, NotImplementedError) or "NotImplementedError" in str(e):
+            logger.warning(f"call_structured: 降级到 chat + StructResponse: {e}")
+        else:
+            raise
+
+    ai_message = await llm_client.chat(messages=messages)
+    return ai_message | StructResponse("pydantic", response_model)
+
+
 @dataclass
 class StepContext:
     """Shared context injected into every ExtractionStep by the orchestrator.
@@ -58,6 +92,20 @@ class ExtractionStep(ABC, Generic[InputT, OutputT]):
         self.llm_client = context.llm_client
         self.language = context.language
         self.config = context.config
+
+    # ── Structured output helper ──
+
+    async def call_structured(
+        self,
+        messages: list[dict],
+        response_model: type,
+    ):
+        """兼容所有 provider 的结构化输出辅助方法。
+
+        代理到模块级 call_structured()，子类的 call_llm 应使用此方法
+        代替直接调用 self.llm_client.response_structured()。
+        """
+        return await call_structured(self.llm_client, messages, response_model)
 
     # ── Subclasses must implement ──
 

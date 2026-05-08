@@ -71,18 +71,18 @@ Input JSON:
 - `aliases`
   - 用户的别名、昵称、称呼、英文名、稳定使用的另一个名字
 - `core_facts`
-  - 用户相对稳定的基础事实，如身份、年龄、国籍、所在地、关系状态、家庭状态、长期背景
+  - 用户相对稳定的基础事实，如身份、年龄、来源地、所在地、关系状态、家庭状态、长期背景
 - `traits`
   - 用户相对稳定的人格特质、风格、气质、行为倾向
 - `relations`
-  - 用户与他人/群体/宠物/重要对象之间值得长期记忆的关系
+  - 用户与他人、群体、宠物、重要对象之间值得长期记忆的关系
   - 保持字符串格式，可包含多个片段，常见格式如 `对象 | 关系/身份 | 补充信息`
 - `goals`
   - 用户明确、稳定、值得长期保留的人生目标、长期计划、持续追求
 - `interests`
   - 用户稳定的兴趣、偏好、长期爱好
 - `beliefs_or_stances`
-  - 用户稳定的信念、价值立场、政治/宗教/社会议题立场
+  - 用户稳定的信念、价值立场、政治、宗教或社会议题立场
 - `anchors`
   - 对用户有长期意义的物品、收藏、纪念物、象征物
   - 保持字符串格式，可包含多个片段，常见格式如 `对象 | 来源/关联 | 意义`
@@ -93,18 +93,18 @@ Input JSON:
 - `aliases`
   - aliases, nicknames, stable alternative names, English names, or regular forms of address
 - `core_facts`
-  - stable basic facts such as identity, age, nationality, residence, relationship status, family status, or long-term background
+  - stable basic facts such as identity, age, origin, residence, relationship status, family status, or long-term background
 - `traits`
   - stable personality traits, style, temperament, or behavioral tendencies
 - `relations`
-  - durable relationships between the user and people/groups/pets/important entities
+  - durable relationships between the user and people, groups, pets, or important entities
   - keep string format; common pattern: `entity | relation/identity | extra info`
 - `goals`
   - explicit, stable, long-term goals or ongoing pursuits worth remembering
 - `interests`
   - stable interests, preferences, or hobbies
 - `beliefs_or_stances`
-  - stable beliefs, values, political/religious/social stances
+  - stable beliefs, values, political, religious, or social stances
 - `anchors`
   - personally meaningful objects, collections, keepsakes, or symbols
   - keep string format; common pattern: `object | source/association | meaning`
@@ -120,14 +120,14 @@ Input JSON:
 
 - 如果某条信息已经在 `existing_metadata` 中出现，不能再次输出
 - 即使 `description` 只是换了一种说法表达已有信息，也不要重复输出
-- 如果只是对已有信息做轻微改写、近义改写、语序调整，也视为重复
+- 如果只是轻微改写、近义改写、语序调整，也视为重复
 
 2. 不修改已有内容
 
 - 不要纠正已有 metadata 的措辞
 - 不要补全已有 metadata 的结构
 - 不要把已有 metadata 中的短字符串改写成更长版本后再输出
-- 不要因为 `description` 出现了更精确表达，就把已有内容“升级后重新输出”
+- 不要因为 `description` 出现了更精确表达，就把已有内容升级后重新输出
 
 3. 只保留对用户画像有长期价值的信息
 
@@ -135,24 +135,34 @@ Input JSON:
 - 不要提取纯闲聊、瞬时感受、一次性很弱的细节
 - 短暂情绪通常不单独提取，除非它是某个重要事件说明的一部分
 
-4. 所有字段都必须是字符串数组
+4. 最小语义完整单元
+
+- 每个 metadata 条目都应尽量保留“最小但语义完整”的信息
+- 不要退化成脱离上下文后意义不足的裸名词、裸地名、裸主题词、裸事件名
+- 也不要扩写成冗长整句
+- 目标是：该字符串单独拿出来时，仍然知道它在说什么
+- 优先保留类似 `在上海工作`、`来自湖南长沙`、`申请领养机构`、`参加 pride parade | 3 July 2023` 这样的形式
+- 避免输出类似 `上海`、`湖南长沙`、`家庭`、`pride parade` 这种信息残缺的条目
+
+5. 所有字段都必须是字符串数组
 
 - 不允许输出对象数组
 - 不允许输出嵌套结构
 - 不允许把 `events` 拆成 event/time/note 对象
-- 不允许把 `relations` 拆成 subject/relation/object 对象
+- 不允许把 `relations` 拆成结构化对象
 
-5. 可以保留多段信息在一个字符串里
+6. 可以保留多段信息在一个字符串里
 
 - `relations`、`anchors`、`events` 可以使用 `|` 连接多个片段
 - 只有在确实有助于保留结构时才这样做
 - 不必强行补满固定片段数，宁可简洁准确
 
-6. 证据边界
+7. 证据边界
 
 - 只能依据 `description` 提取新增 metadata
 - `existing_metadata` 只用于去重和分类参考，不是新增内容来源
 - 不要从常识、推测或世界知识补充额外信息
+- 但允许从复合表述中识别并提取属于字段定义范围内的蕴含事实。例如 `single parent` 蕴含了关系状态和家庭状态，可以提取为 core_fact。但仅限于该蕴含信息本身属于某个字段的定义范围且具有长期画像价值。不要泛化提取所有修饰词或临时状态
   {% else %}
 
 1. Extract only new content
@@ -173,44 +183,47 @@ Input JSON:
 - Exclude casual chatter, fleeting states, and weak one-off details
 - Temporary emotions should usually not be extracted unless they are part of an important event description
 
-4. Every field must be an array of strings
+4. Minimal Semantically Complete Unit
+
+- Each metadata item should preserve the smallest semantically complete unit
+- Do not reduce items to bare nouns, bare place names, bare topic labels, or bare event names when that loses key meaning
+- Do not expand them into long full sentences either
+- The target is a short string that still makes sense on its own outside the original sentence
+- Prefer forms like `works in Shanghai`, `from Hunan Changsha`, `applied to adoption agencies`, or `attended pride parade | 3 July 2023`
+- Avoid low-information items like `Shanghai`, `Hunan Changsha`, `family`, or `pride parade` when they are semantically incomplete
+
+5. Every field must be an array of strings
 
 - No object arrays
 - No nested structure
 - Do not split `events` into event/time/note objects
-- Do not split `relations` into structured triples
+- Do not split `relations` into structured objects
 
-5. Multi-part strings are allowed
+6. Multi-part strings are allowed
 
 - `relations`, `anchors`, and `events` may use `|` to join parts
 - Do this only when it helps preserve useful structure
 - Do not force a fixed number of parts
 
-6. Evidence boundary
+7. Evidence boundary
 
 - Extract new metadata only from `description`
 - Use `existing_metadata` only for deduplication and category reference
 - Do not add unsupported information from world knowledge or inference beyond the text
+- However, you may extract implied facts from compound expressions when they fall within a field's defined scope. For example, `single parent` implies relationship status and family status, and may be extracted as a core_fact. This is allowed only when the implied information belongs to a field's definition and has durable profile value. Do not over-extract every modifier or transient state
   {% endif %}
 
 ===Deduplication Rules===
 {% if language == "zh" %}
 
 - 先理解 `description` 想表达的含义，再与 `existing_metadata` 做语义去重
-- 若以下任一情况成立，则视为“已存在”，不要输出：
+- 若以下任一情况成立，则视为已存在，不要输出：
   - 完全相同
   - 近义表达
   - 更长或更短但语义相同
   - 只是把已有多段字符串拆开或重新组合
-  - 只是把已有事件/关系中的时间或备注略作改写
+  - 只是把已有事件或关系中的时间或备注略作改写
 - 去重标准以“是否新增了值得保留的新事实”为准，而不是字面是否完全一致
-
-去重示例：
-
-- 已有 `single`，新描述说 `not in a relationship`，不要输出
-- 已有 `from Sweden`，新描述说 `originally from Sweden`，不要输出
-- 已有 `art`，新描述说 `likes art a lot`，通常不要输出
-- 已有 `Oscar | pet guinea pig`，新描述说 `her guinea pig Oscar`，不要输出
   {% else %}
 - First understand the meaning of the description, then deduplicate semantically against `existing_metadata`
 - Treat an item as already existing if any of these holds:
@@ -218,7 +231,7 @@ Input JSON:
   - close paraphrase
   - longer or shorter wording with the same meaning
   - just a split or recombination of an existing multi-part string
-  - a lightly reworded time/note variant of an existing event or relation
+  - a lightly reworded time or note variant of an existing event or relation
 - The test is whether the item adds a genuinely new durable fact, not whether the wording is different
   {% endif %}
 
@@ -233,6 +246,11 @@ Input JSON:
 
 - 放稳定基础事实
 - 不要放短暂状态、一次性动作、弱情绪
+- 地点相关事实不能只保留裸地名
+- 要保留最小完整事实语义，例如：
+  - `来自湖南长沙` 好于 `湖南长沙`
+  - `在上海工作` 好于 `上海`
+  - `住在深圳` 好于 `深圳`
 
 `traits`
 
@@ -249,6 +267,11 @@ Input JSON:
 
 - 只收长期目标
 - 不要把一时愿望、泛化口号、普通期待当作 goal
+- 不要只保留目标对象名词
+- 要尽量保留目标动作或目标结果的最小完整语义
+- 例如：
+  - `建立家庭并领养孩子` 好于 `家庭`
+  - `从事跨性别群体心理健康工作` 好于 `mental health work`
 
 `interests`
 
@@ -257,18 +280,25 @@ Input JSON:
 
 `beliefs_or_stances`
 
-- 收稳定信念、价值观、政治/宗教/社会议题立场
+- 收稳定信念、价值观、政治、宗教、社会议题立场
 - 不要收普通瞬时意见
+- 这类字段允许短词形式，只要该短词本身语义充分，例如 `liberal`
 
 `anchors`
 
 - 收具有象征意义、纪念意义、长期陪伴意义的对象
 - 可写来源与意义
+- 不要只保留过于空泛的对象名
+- 如果来源或象征意义是关键，应尽量保留，例如 `项链 | 来自外婆 | 象征爱、信念与力量`
 
 `events`
 
 - 只收对用户画像有长期价值的事件或里程碑
-- 优先保留时间信息和事件意义
+- 不要只保留裸事件名
+- 如果时间已知，优先一并保留时间；如果事件意义明显，也尽量保留
+- 例如：
+  - `参加 pride parade | 3 July 2023 | felt belonging` 好于 `pride parade`
+  - `通过领养机构面试 | October 2023 | excited and thankful` 好于 `领养面试`
 - 普通日常小事通常不收，除非它明显揭示重要关系、目标推进或身份背景
   {% else %}
   `aliases`
@@ -279,6 +309,11 @@ Input JSON:
 
 - keep stable background facts
 - exclude temporary states, one-off actions, and weak emotions
+- location-related facts should not be reduced to a bare place name
+- keep the smallest complete fact, for example:
+  - `from Hunan Changsha` is better than `Hunan Changsha`
+  - `works in Shanghai` is better than `Shanghai`
+  - `lives in Shenzhen` is better than `Shenzhen`
 
 `traits`
 
@@ -295,6 +330,11 @@ Input JSON:
 
 - only long-term goals
 - do not treat temporary wishes or generic aspirations as goals
+- do not keep only the target noun
+- preserve the smallest complete goal action or outcome
+- for example:
+  - `build a family and adopt children` is better than `family`
+  - `pursue mental health work for transgender people` is better than `mental health work`
 
 `interests`
 
@@ -303,18 +343,24 @@ Input JSON:
 
 `beliefs_or_stances`
 
-- keep stable beliefs, values, or social/political/religious stances
+- keep stable beliefs, values, political, religious, or social stances
 - exclude ordinary fleeting opinions
+- short label-like items are acceptable here when they are already semantically complete, such as `liberal`
 
 `anchors`
 
 - keep symbolic, commemorative, or personally meaningful objects
 - source and meaning may be included
+- do not keep an overly vague object name by itself when the source or symbolic meaning is what makes it memorable
 
 `events`
 
 - keep only events or milestones with durable profile value
-- preserve time and significance when useful
+- do not keep only a bare event name
+- if time is known, prefer to preserve it; if the event meaning is clear and important, preserve that too
+- for example:
+  - `attended pride parade | 3 July 2023 | felt belonging` is better than `pride parade`
+  - `passed adoption agency interviews | October 2023 | excited and thankful` is better than `adoption interview`
 - exclude ordinary daily trivia unless it clearly advances an important goal, relationship, or identity arc
   {% endif %}
 
@@ -459,6 +505,52 @@ Output:
     "attended workshop on trauma-informed care | last month | clarified future direction"
   ]
 }
+
+示例 6
+Input:
+
+- description:
+  - "当前在上海工作的说话者。"
+- existing_metadata:
+  - core_facts: []
+
+Output:
+{
+  "aliases": [],
+  "core_facts": [
+    "在上海工作"
+  ],
+  "traits": [],
+  "relations": [],
+  "goals": [],
+  "interests": [],
+  "beliefs_or_stances": [],
+  "anchors": [],
+  "events": []
+}
+
+示例 7
+Input:
+
+- description:
+  - "老家在湖南长沙的说话者。"
+- existing_metadata:
+  - core_facts: []
+
+Output:
+{
+  "aliases": [],
+  "core_facts": [
+    "来自湖南长沙"
+  ],
+  "traits": [],
+  "relations": [],
+  "goals": [],
+  "interests": [],
+  "beliefs_or_stances": [],
+  "anchors": [],
+  "events": []
+}
 {% else %}
 Example 1
 Input:
@@ -573,9 +665,71 @@ Output:
     "attended workshop on trauma-informed care | last month | clarified future direction"
   ]
 }
+
+Example 6
+Input:
+
+- description:
+  - "The speaker currently works in Shanghai."
+- existing_metadata:
+  - core_facts: []
+
+Output:
+{
+  "aliases": [],
+  "core_facts": [
+    "works in Shanghai"
+  ],
+  "traits": [],
+  "relations": [],
+  "goals": [],
+  "interests": [],
+  "beliefs_or_stances": [],
+  "anchors": [],
+  "events": []
+}
+
+Example 7
+Input:
+
+- description:
+  - "The speaker is originally from Hunan Changsha."
+- existing_metadata:
+  - core_facts: []
+
+Output:
+{
+  "aliases": [],
+  "core_facts": [
+    "from Hunan Changsha"
+  ],
+  "traits": [],
+  "relations": [],
+  "goals": [],
+  "interests": [],
+  "beliefs_or_stances": [],
+  "anchors": [],
+  "events": []
+}
 {% endif %}
 
 ===Output Format===
+===Output Language Rule===
+{% if language == "zh" %}
+metadata 字符串值的语言必须与输入 `description` 的主要语言一致。
+
+- 如果输入 `description` 主要是中文，则 metadata 字符串值用中文输出。
+- 如果输入 `description` 主要是英文，则 metadata 字符串值用英文输出。
+- 不要为了规范化而将提取的条目翻译成另一种语言。
+- JSON 键名、数组结构、分隔符（如 `|`）保持不变；只有 metadata 字符串值需要跟随输入语言。
+  {% else %}
+  The language of metadata string values MUST follow the primary language of the input `description`.
+- If the input `description` is primarily Chinese, output metadata string values in Chinese.
+- If the input `description` is primarily English, output metadata string values in English.
+- Do not translate extracted items into a different language just for normalization.
+- JSON keys, array structure, and separators such as `|` stay unchanged; only metadata string values need to follow the input language.
+  {% endif %}
+
 {% if language == "zh" %}
 输出必须是严格可解析的 JSON 对象，结构固定如下：
 {% else %}
@@ -605,6 +759,7 @@ JSON 要求：
 - 字符串内如果包含双引号，必须转义为 `\"`
 - 不要遗漏字段
 - 不要输出尾逗号
+- metadata 字符串语言必须与输入 `description` 的主要语言一致
   {% else %}
   JSON requirements:
 - Use standard ASCII double quotes `"`
@@ -613,4 +768,5 @@ JSON 要求：
 - Escape internal quotes as `\"`
 - Do not omit any field
 - Do not emit trailing commas
+- Metadata string language must match the primary language of the input `description`
   {% endif %}

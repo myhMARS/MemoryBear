@@ -64,7 +64,7 @@ class AgentMemory_Long_Term(ABC):
     STRATEGY_AGGREGATE = "aggregate"
     STRATEGY_CHUNK = "chunk"
     STRATEGY_TIME = "time"
-    DEFAULT_SCOPE = 1
+    DEFAULT_SCOPE = 6
     TIME_SCOPE = 5
 
 

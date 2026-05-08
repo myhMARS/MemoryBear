@@ -63,7 +63,7 @@ class EmotionExtractionStep(ExtractionStep[EmotionStepInput, EmotionStepOutput])
 
     async def call_llm(self, prompt: Any) -> Any:
         messages = [{"role": "user", "content": prompt}]
-        return await self.llm_client.response_structured(
+        return await self.call_structured(
             messages, EmotionExtraction
         )
 

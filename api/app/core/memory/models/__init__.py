@@ -61,7 +61,6 @@ from app.core.memory.models.triplet_models import (
 # User metadata models
 from app.core.memory.models.metadata_models import (
     MetadataExtractionResponse,
-    MetadataFieldChange,
 )
 
 # Ontology scenario models (LLM extracted from scenarios)
@@ -131,7 +130,6 @@ __all__ = [
     "Triplet",
     "TripletExtractionResponse",
     "MetadataExtractionResponse",
-    "MetadataFieldChange",
     # Ontology models
     "OntologyClass",
     "OntologyExtractionResponse",
