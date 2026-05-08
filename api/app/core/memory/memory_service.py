@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from app.schemas.memory_config_schema import MemoryConfig
 
 from app.core.memory.enums import SearchStrategy
-from app.core.memory.models.service_models import MemorySearchResult
+from app.core.memory.models.service_models import MemoryContext, MemorySearchResult
 from app.core.memory.pipelines.memory_read import ReadPipeLine
 from app.db import get_db_context
 
@@ -53,6 +53,10 @@ class MemoryService:
         """
         self.memory_config = memory_config
         self.end_user_id = end_user_id
+        self.ctx = MemoryContext(
+            end_user_id=end_user_id,
+            memory_config=memory_config,
+        )
 
     async def write(
         self,
