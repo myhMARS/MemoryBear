@@ -1872,3 +1872,65 @@ NODE_ID_QUERY_CYPHER_MAPPING = {
     Neo4jNodeType.COMMUNITY: SEARCH_COMMUNITIES_BY_IDS,
     Neo4jNodeType.PERCEPTUAL: SEARCH_PERCEPTUAL_BY_IDS
 }
+
+# -------------------
+# Assistant Original / Pruned nodes and edges
+# -------------------
+
+ASSISTANT_ORIGINAL_NODE_SAVE = """
+UNWIND $originals AS o
+MERGE (n:AssistantOriginal {id: o.id})
+SET n += {
+    id: o.id,
+    name: o.name,
+    end_user_id: o.end_user_id,
+    run_id: o.run_id,
+    created_at: o.created_at,
+    pair_id: o.pair_id,
+    dialog_id: o.dialog_id,
+    text: o.text
+}
+RETURN n.id AS uuid
+"""
+
+ASSISTANT_PRUNED_NODE_SAVE = """
+UNWIND $pruneds AS p
+MERGE (n:AssistantPruned {id: p.id})
+SET n += {
+    id: p.id,
+    name: p.name,
+    end_user_id: p.end_user_id,
+    run_id: p.run_id,
+    created_at: p.created_at,
+    pair_id: p.pair_id,
+    dialog_id: p.dialog_id,
+    text: p.text,
+    memory_type: p.memory_type,
+    text_embedding: p.text_embedding
+}
+RETURN n.id AS uuid
+"""
+
+ASSISTANT_PRUNED_EDGE_SAVE = """
+UNWIND $edges AS edge
+MATCH (orig:AssistantOriginal {id: edge.source, end_user_id: edge.end_user_id})
+MATCH (pruned:AssistantPruned {id: edge.target, end_user_id: edge.end_user_id})
+MERGE (orig)-[r:PRUNED_TO {pair_id: edge.pair_id}]->(pruned)
+ON CREATE SET r.id = edge.id,
+    r.end_user_id = edge.end_user_id,
+    r.run_id = edge.run_id,
+    r.created_at = edge.created_at
+RETURN elementId(r) AS uuid
+"""
+
+ASSISTANT_DIALOG_EDGE_SAVE = """
+UNWIND $edges AS edge
+MATCH (orig:AssistantOriginal {id: edge.source, end_user_id: edge.end_user_id})
+MATCH (dialog:Dialogue {id: edge.target, end_user_id: edge.end_user_id})
+MERGE (orig)-[r:BELONGS_TO_DIALOG]->(dialog)
+ON CREATE SET r.id = edge.id,
+    r.end_user_id = edge.end_user_id,
+    r.run_id = edge.run_id,
+    r.created_at = edge.created_at
+RETURN elementId(r) AS uuid
+"""
