@@ -668,7 +668,7 @@ class WorkflowService:
             meta_data=human_meta,
         )
         self.conversation_service.add_message(
-            **(({"message_id": message_id} if message_id else {})),
+            **({"message_id": message_id} if message_id else {}),
             conversation_id=conversation_id,
             role="assistant",
             content=error,
