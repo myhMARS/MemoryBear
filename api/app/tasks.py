@@ -2266,7 +2266,7 @@ def extract_metadata_batch_task(
 
                 _dir = _Path(snapshot_dir)
                 _dir.mkdir(parents=True, exist_ok=True)
-                _path = _dir / "8_metadata_outputs.json"
+                _path = _dir / "9_metadata_outputs.json"
                 with open(_path, "w", encoding="utf-8") as _f:
                     _json.dump(snapshot_outputs, _f, ensure_ascii=False, indent=2, default=str)
                 logger.info(
