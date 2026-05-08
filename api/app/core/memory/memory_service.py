@@ -21,6 +21,11 @@ if TYPE_CHECKING:
     from app.core.memory.models.message_models import DialogData
     from app.schemas.memory_config_schema import MemoryConfig
 
+from app.core.memory.enums import SearchStrategy
+from app.core.memory.models.service_models import MemorySearchResult
+from app.core.memory.pipelines.memory_read import ReadPipeLine
+from app.db import get_db_context
+
 logger = logging.getLogger(__name__)
 
 
