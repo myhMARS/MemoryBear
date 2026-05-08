@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # 默认核心通用类型 —— 与 ontology.md Entity Ontology 对齐的 13 类
 DEFAULT_CORE_GENERAL_TYPES: Set[str] = {
-    "人物", "组织", "群体", "角色职业",
+    "生命体", "组织", "群体", "角色职业",
     "地点设施", "物品设备", "软件平台", "识别联系信息",
     "文档媒体", "知识能力", "偏好习惯", "具体目标",
     "称呼别名",

@@ -1073,7 +1073,7 @@ class MemoryAgentService:
             # 查询该用户的热门实体
             entity_query = (
                 "MATCH (e:ExtractedEntity) "
-                "WHERE ($end_user_id IS NULL OR e.end_user_id = $end_user_id) AND e.entity_type <> '人物' AND e.name IS NOT NULL "
+                "WHERE ($end_user_id IS NULL OR e.end_user_id = $end_user_id) AND e.entity_type <> '生命体' AND e.name IS NOT NULL "
                 "RETURN e.name AS name, count(e) AS frequency "
                 "ORDER BY frequency DESC LIMIT 20"
             )
@@ -1131,7 +1131,7 @@ class MemoryAgentService:
             names_to_exclude = ['AI', 'Caroline', 'Melanie', 'Jon', 'Gina', '用户', 'AI助手', 'John', 'Maria']
             hot_tag_query = (
                 "MATCH (e:ExtractedEntity) "
-                "WHERE ($end_user_id IS NULL OR e.end_user_id = $end_user_id) AND e.entity_type <> '人物' "
+                "WHERE ($end_user_id IS NULL OR e.end_user_id = $end_user_id) AND e.entity_type <> '生命体' "
                 "AND e.name IS NOT NULL AND NOT e.name IN $names_to_exclude "
                 "RETURN e.name AS name, count(e) AS frequency "
                 "ORDER BY frequency DESC LIMIT 4"

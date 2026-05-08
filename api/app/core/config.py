@@ -305,7 +305,7 @@ class Settings:
     # 核心通用类型列表（逗号分隔）—— 与 ontology.md Entity Ontology 保持一致的 13 类
     CORE_GENERAL_TYPES: str = os.getenv(
         "CORE_GENERAL_TYPES",
-        "人物,组织,群体,角色职业,地点设施,物品设备,软件平台,识别联系信息,"
+        "生命体,组织,群体,角色职业,地点设施,物品设备,软件平台,识别联系信息,"
         "文档媒体,知识能力,偏好习惯,具体目标,称呼别名"
     )
 

@@ -637,7 +637,7 @@ def fuzzy_match(
             return ""
         t_up = t.upper()
         TYPE_ALIASES = {
-            "PERSON": {"人物", "人", "个人", "人名", "PERSON", "PEOPLE", "INDIVIDUAL"},
+            "PERSON": {"生命体", "人物", "人", "个人", "人名", "PERSON", "PEOPLE", "INDIVIDUAL"},
             "ORG": {"组织", "ORG"},
             "COMPANY": {"公司", "企业", "COMPANY"},
             "INSTITUTION": {"机构", "INSTITUTION"},
