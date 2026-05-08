@@ -618,6 +618,63 @@ class WorkflowService:
                 storage_type = 'neo4j'
         return storage_type, user_rag_memory_id
 
+    @staticmethod
+    def _extract_human_message_and_meta(
+            final_messages: list[dict],
+            fallback_message: str,
+            fallback_files: list[dict] | None = None
+    ) -> tuple[str, dict]:
+        """从消息列表中提取用户消息和文件元数据，失败时回退到 payload 数据。"""
+        human_message = fallback_message
+        human_meta: dict = {"files": []}
+        for message in final_messages:
+            if message["role"] == "user":
+                if isinstance(message["content"], str):
+                    if not human_message:
+                        human_message = message["content"]
+                elif isinstance(message["content"], list):
+                    for f in message["content"]:
+                        human_meta["files"].append({
+                            "type": f.get("type"),
+                            "url": f.get("url"),
+                            "file_type": f.get("origin_file_type"),
+                            "name": f.get("name"),
+                            "size": f.get("size"),
+                        })
+        if not human_meta["files"] and fallback_files:
+            for f in fallback_files:
+                human_meta["files"].append({
+                    "type": f.get("type"),
+                    "url": f.get("url"),
+                    "file_type": f.get("origin_file_type"),
+                    "name": f.get("name"),
+                    "size": f.get("size"),
+                })
+        return human_message, human_meta
+
+    def _save_failed_conversation(
+            self,
+            conversation_id: uuid.UUID | None,
+            message_id: uuid.UUID | None,
+            human_message: str,
+            human_meta: dict,
+            error: str,
+    ) -> None:
+        """将失败时的用户消息和助手错误消息写入会话。"""
+        self.conversation_service.add_message(
+            conversation_id=conversation_id,
+            role="user",
+            content=human_message,
+            meta_data=human_meta,
+        )
+        self.conversation_service.add_message(
+            **(({"message_id": message_id} if message_id else {})),
+            conversation_id=conversation_id,
+            role="assistant",
+            content=error,
+            meta_data={"error": error},
+        )
+
     def _get_history_info(self, conversation_id: uuid.UUID) -> tuple[dict, list] | None:
         executions = self.execution_repo.get_by_conversation_id(
             conversation_id=conversation_id,
@@ -764,7 +821,10 @@ class WorkflowService:
                             for file in message["content"]:
                                 human_meta["files"].append({
                                     "type": file.get("type"),
-                                    "url": file.get("url")
+                                    "url": file.get("url"),
+                                    "file_type": file.get("origin_file_type"),
+                                    "name": file.get("name"),
+                                    "size": file.get("size"),
                                 })
                     if message["role"] == "assistant":
                         assistant_message = message["content"]
@@ -814,44 +874,12 @@ class WorkflowService:
                 )
                 logger.error(f"Workflow Run Failed, execution_id: {execution.execution_id},"
                              f" error: {result.get('error')}")
-                # 添加失败消息到会话
                 final_messages = result.get("messages", [])[init_message_length:]
-                human_message = payload.message or ""
-                human_meta = {"files": []}
-                
-                # 从 final_messages 中提取用户消息和文件
-                for message in final_messages:
-                    if message["role"] == "user":
-                        if isinstance(message["content"], str):
-                            if not human_message:  # 如果 payload.message 为空，使用 messages 中的内容
-                                human_message = message["content"]
-                        elif isinstance(message["content"], list):
-                            for file in message["content"]:
-                                human_meta["files"].append({
-                                    "type": file.get("type"),
-                                    "url": file.get("url")
-                                })
-                
-                # 如果没有从 messages 提取到内容，使用 payload 中的文件信息
-                if not human_meta["files"] and files:
-                    for file in files:
-                        human_meta["files"].append({
-                            "type": file.get("type"),
-                            "url": file.get("url")
-                        })
-                
-                self.conversation_service.add_message(
-                    conversation_id=conversation_id_uuid,
-                    role="user",
-                    content=human_message,
-                    meta_data=human_meta
+                human_message, human_meta = self._extract_human_message_and_meta(
+                    final_messages, payload.message or "", files
                 )
-                self.conversation_service.add_message(
-                    message_id=message_id,
-                    conversation_id=conversation_id_uuid,
-                    role="assistant",
-                    content=result.get('error'),
-                    meta_data={"error": result.get('error')}
+                self._save_failed_conversation(
+                    conversation_id_uuid, message_id, human_message, human_meta, result.get("error") or ""
                 )
                 filtered_citations = []
 
@@ -874,35 +902,9 @@ class WorkflowService:
 
         except Exception as e:
             logger.error(f"工作流执行失败: execution_id={execution.execution_id}, error={e}", exc_info=True)
-            self.update_execution_status(
-                execution.execution_id,
-                "failed",
-                error_message=str(e)
-            )
-            # 添加失败消息到会话
-            human_message = payload.message or ""
-            human_meta = {"files": []}
-            
-            # 从 files 变量中提取文件信息
-            if files:
-                for file in files:
-                    human_meta["files"].append({
-                        "type": file.get("type"),
-                        "url": file.get("url")
-                    })
-            
-            self.conversation_service.add_message(
-                conversation_id=conversation_id_uuid,
-                role="user",
-                content=human_message,
-                meta_data=human_meta
-            )
-            self.conversation_service.add_message(
-                conversation_id=conversation_id_uuid,
-                role="assistant",
-                content=str(e),
-                meta_data={"error": str(e)}
-            )
+            self.update_execution_status(execution.execution_id, "failed", error_message=str(e))
+            human_message, human_meta = self._extract_human_message_and_meta([], payload.message or "", files)
+            self._save_failed_conversation(conversation_id_uuid, None, human_message, human_meta, str(e))
             raise BusinessException(
                 code=BizCode.INTERNAL_ERROR,
                 message=f"工作流执行失败: {str(e)}"
@@ -1089,57 +1091,16 @@ class WorkflowService:
                         logger.info(f"Workflow Run Success, "
                                     f"execution_id: {execution.execution_id}, message count: {len(final_messages)}")
                     elif status == "failed":
-                        # 添加失败消息到会话
                         error_msg = event.get("data", {}).get("error", "未知错误")
                         final_messages = event.get("data", {}).get("messages", [])[init_message_length:]
-                        human_message = payload.message or ""
-                        human_meta = {"files": []}
-                        
-                        # 从 final_messages 中提取用户消息和文件
-                        for message in final_messages:
-                            if message["role"] == "user":
-                                if isinstance(message["content"], str):
-                                    if not human_message:  # 如果 payload.message 为空，使用 messages 中的内容
-                                        human_message = message["content"]
-                                elif isinstance(message["content"], list):
-                                    for file in message["content"]:
-                                        human_meta["files"].append({
-                                            "type": file.get("type"),
-                                            "url": file.get("url"),
-                                            "file_type": file.get("origin_file_type"),
-                                            "name": file.get("name"),
-                                            "size": file.get("size")
-                                        })
-                        
-                        # 如果没有从 messages 提取到文件，使用 files 变量
-                        if not human_meta["files"] and files:
-                            for file in files:
-                                human_meta["files"].append({
-                                    "type": file.get("type"),
-                                    "url": file.get("url"),
-                                    "file_type": file.get("origin_file_type"),
-                                    "name": file.get("name"),
-                                    "size": file.get("size")
-                                })
-                        
-                        # 总是添加用户消息，即使内容为空
-                        self.conversation_service.add_message(
-                            conversation_id=conversation_id_uuid,
-                            role="user",
-                            content=human_message,
-                            meta_data=human_meta
+                        human_message, human_meta = self._extract_human_message_and_meta(
+                            final_messages, payload.message or "", files
                         )
-                        self.conversation_service.add_message(
-                            message_id=message_id,
-                            conversation_id=conversation_id_uuid,
-                            role="assistant",
-                            content=error_msg,
-                            meta_data={"error": error_msg}
+                        self._save_failed_conversation(
+                            conversation_id_uuid, message_id, human_message, human_meta, error_msg
                         )
                         self.update_execution_status(
-                            execution.execution_id,
-                            "failed",
-                            output_data=event.get("data")
+                            execution.execution_id, "failed", output_data=event.get("data")
                         )
                     else:
                         logger.error(f"unexpect workflow run status, status: {status}")
@@ -1166,46 +1127,10 @@ class WorkflowService:
                 f"Workflow streaming execution failed: execution_id={execution.execution_id}, error={e}",
                 exc_info=True
             )
-            self.update_execution_status(
-                execution.execution_id,
-                "failed",
-                error_message=str(e)
-            )
-            # 添加失败消息到会话
-            human_message = payload.message or ""
-            human_meta = {"files": []}
-            
-            # 从 files 变量中提取文件信息
-            if files:
-                for file in files:
-                    human_meta["files"].append({
-                        "type": file.get("type"),
-                        "url": file.get("url"),
-                        "file_type": file.get("origin_file_type"),
-                        "name": file.get("name"),
-                        "size": file.get("size")
-                    })
-            
-            self.conversation_service.add_message(
-                conversation_id=conversation_id_uuid,
-                role="user",
-                content=human_message,
-                meta_data=human_meta
-            )
-            self.conversation_service.add_message(
-                conversation_id=conversation_id_uuid,
-                role="assistant",
-                content=str(e),
-                meta_data={"error": str(e)}
-            )
-            # 发送错误事件
-            yield {
-                "event": "error",
-                "data": {
-                    "execution_id": execution.execution_id,
-                    "error": str(e)
-                }
-            }
+            self.update_execution_status(execution.execution_id, "failed", error_message=str(e))
+            human_message, human_meta = self._extract_human_message_and_meta([], payload.message or "", files)
+            self._save_failed_conversation(conversation_id_uuid, None, human_message, human_meta, str(e))
+            yield {"event": "error", "data": {"execution_id": execution.execution_id, "error": str(e)}}
 
     async def _build_node_context(
             self,
