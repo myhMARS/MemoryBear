@@ -1,14 +1,15 @@
 from typing import Self
 
-from pydantic import BaseModel, Field, field_serializer, ConfigDict, model_validator, computed_field
+from pydantic import BaseModel, Field, field_serializer, ConfigDict, computed_field
 
 from app.core.memory.enums import Neo4jNodeType, StorageType
-from app.core.validators import file_validator
 from app.schemas.memory_config_schema import MemoryConfig
 
 
 class MemoryContext(BaseModel):
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+    # Tell Pydantic v2 to skip coercion for the stdlib dataclass MemoryConfig
+    # while keeping the concrete type annotation for static analysis.
+    model_config = ConfigDict(frozen=True, ignored_types=(MemoryConfig,))
 
     end_user_id: str
     memory_config: MemoryConfig
