@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from urllib.parse import quote
 
 from app.core.error_codes import BizCode
+from app.core.exceptions import BusinessException
 from app.core.logging_config import get_business_logger
 from app.core.response_utils import success, fail
 from app.db import get_db
@@ -574,7 +575,6 @@ async def draft_run(
     from app.services.multi_agent_service import MultiAgentService
     from app.models import AgentConfig, ModelConfig, AppRelease
     from sqlalchemy import select
-    from app.core.exceptions import BusinessException
     from app.services.draft_run_service import AgentRunService
 
     service = AppService(db)
@@ -937,8 +937,6 @@ async def draft_run_compare(
     # 1. 验证应用和权限
     app = service._get_app_or_404(app_id)
     if app.type != "agent":
-        from app.core.exceptions import BusinessException
-        from app.core.error_codes import BizCode
         raise BusinessException("只有 Agent 类型应用支持试运行", BizCode.APP_TYPE_NOT_SUPPORTED)
     service._validate_app_accessible(app, workspace_id)
 
@@ -958,8 +956,6 @@ async def draft_run_compare(
     stmt = select(AgentConfig).where(AgentConfig.app_id == app_id)
     agent_cfg = db.scalars(stmt).first()
     if not agent_cfg:
-        from app.core.exceptions import BusinessException
-        from app.core.error_codes import BizCode
         raise BusinessException("Agent 配置不存在", BizCode.AGENT_CONFIG_MISSING)
 
     # 3. 验证所有模型配置
@@ -1086,7 +1082,9 @@ async def run_single_workflow_node(
     - 系统变量: "sys.message"、"sys.files"
     """
     workspace_id = current_user.current_workspace_id
-    config = workflow_service.check_config(app_id)
+    config = workflow_service.get_workflow_config(app_id)
+    if not config:
+        raise BusinessException("工作流配置不存在，无法运行", BizCode.CONFIG_MISSING)
 
     raw_inputs = payload.inputs or {}
     input_data = {
