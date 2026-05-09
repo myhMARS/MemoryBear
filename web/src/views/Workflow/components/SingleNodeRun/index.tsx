@@ -288,8 +288,8 @@ const SingleNodeRun: FC<SingleNodeRunProps> = ({ open, onClose, selectedNode, ap
               )}
 
               {/* Input / Output code blocks */}
-              {result && (['inputs', 'process', 'outputs'] as const).map(key => {
-                if (nodeData.type !== 'http-request' && key === 'process') return null
+              {result && (['inputs', 'outputs'] as const).map(key => {
+                // if (nodeData.type !== 'http-request' && key === 'process') return null
                 const content = typeof result[key as keyof RunResult] === 'object' && result[key as keyof RunResult] ? JSON.stringify(result[key as keyof RunResult], null, 2) : result[key as keyof RunResult] ? result[key as keyof RunResult] : '{}'
                 return (
                   <div key={key} className="rb:bg-[#EBEBEB] rb:rounded-lg">
