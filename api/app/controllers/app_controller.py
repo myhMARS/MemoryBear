@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from urllib.parse import quote
 
 from app.core.error_codes import BizCode
+from app.core.exceptions import BusinessException
 from app.core.logging_config import get_business_logger
 from app.core.response_utils import success, fail
 from app.db import get_db
@@ -1086,7 +1087,9 @@ async def run_single_workflow_node(
     - 系统变量: "sys.message"、"sys.files"
     """
     workspace_id = current_user.current_workspace_id
-    config = workflow_service.check_config(app_id)
+    config = workflow_service.get_workflow_config(app_id)
+    if not config:
+        raise BusinessException("工作流配置不存在，无法运行", BizCode.CONFIG_MISSING)
 
     raw_inputs = payload.inputs or {}
     input_data = {
