@@ -295,6 +295,16 @@ class LLMNode(BaseNode):
             }
         }
 
+    def _extract_extra_fields(self, business_result: Any) -> dict:
+        llm_result = business_result.get("llm_result") if isinstance(business_result, dict) else business_result
+        if isinstance(llm_result, AIMessage) and llm_result.response_metadata:
+            meta = llm_result.response_metadata
+            return {"process": {
+                "finish_reason": meta.get("finish_reason") or meta.get("stop_reason"),
+                "model": meta.get("model") or meta.get("model_name"),
+            }}
+        return {}
+
     def _extract_output(self, business_result: Any) -> dict:
         """从业务结果中提取输出变量
         
