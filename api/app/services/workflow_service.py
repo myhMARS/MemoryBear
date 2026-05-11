@@ -1196,6 +1196,10 @@ class WorkflowService:
                 var_type = VariableType.type_map(value)
                 await variable_pool.new(ref_node_id, var_name, value, var_type, mut=False)
 
+        cycle_nodes = [
+            n.get("id") for n in workflow_config_dict.get("nodes", [])
+            if n.get("type") in [NodeType.LOOP, NodeType.ITERATION]
+        ]
         state = WorkflowState(
             messages=input_data.get("conv_messages", []),
             node_outputs={},
@@ -1204,7 +1208,7 @@ class WorkflowService:
             user_id=input_data.get("user_id", ""),
             error=None,
             error_node=None,
-            cycle_nodes=[],
+            cycle_nodes=cycle_nodes,
             looping=0,
             activate={node_id: True},
             memory_storage_type=storage_type,
@@ -1237,6 +1241,7 @@ class WorkflowService:
                 "node_type": node_config.get("type"),
                 "inputs": node._extract_input(state, variable_pool),
                 "outputs": node._extract_output(result),
+                "process": node._extract_extra_fields(result).get("process"),
                 "token_usage": node._extract_token_usage(result),
                 "elapsed_time": elapsed,
                 "error": None,
@@ -1296,6 +1301,7 @@ class WorkflowService:
                     "status": "succeeded",
                     "inputs": node._extract_input(state, variable_pool),
                     "outputs": node._extract_output(final_result),
+                    "process": node._extract_extra_fields(final_result).get("process"),
                     "token_usage": node._extract_token_usage(final_result),
                     "elapsed_time": elapsed,
                     "error": None,
