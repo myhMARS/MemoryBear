@@ -46,9 +46,8 @@ def sync_memory_count_neo4j(end_user_id: str) -> None:
     """
     Synchronous wrapper for use in Celery tasks and other sync contexts.
 
-    Reuses the current event loop if available and open; otherwise creates a
-    new one. All exceptions are caught and logged so callers never need an
-    extra try/except just for logging.
+    Uses asyncio.run() which creates a fresh event loop, runs the coroutine,
+    and closes the loop automatically — no resource leaks.
     """
     async def _run():
         connector = Neo4jConnector()
@@ -58,16 +57,7 @@ def sync_memory_count_neo4j(end_user_id: str) -> None:
             await connector.close()
 
     try:
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        loop.run_until_complete(_run())
+        asyncio.run(_run())
     except Exception as exc:
         _logger.warning(
             f"{_LOG_PREFIX} 同步失败（不影响主流程）: end_user_id={end_user_id}, error={exc}"
